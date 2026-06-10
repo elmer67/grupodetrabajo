@@ -33,6 +33,13 @@ const SESSIONS = {
   'flower123': { profile: 'redes',   group: null, members: null }
 }
 
+const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('')
+const GRUPO_COLORS = {
+  'A': { bg: 'rgba(124,58,237,.22)', border: 'rgba(124,58,237,.55)', text: '#a66ef5' },
+  'B': { bg: 'rgba(236,72,153,.22)', border: 'rgba(236,72,153,.55)', text: '#f472b6' },
+  'C': { bg: 'rgba(14,165,233,.22)',  border: 'rgba(14,165,233,.55)',  text: '#38bdf8' }
+}
+
 // ─────────────────────────────────────────────────────
 //  ESTADO GLOBAL
 // ─────────────────────────────────────────────────────
@@ -50,6 +57,8 @@ let embedServers      = []          // todos los servidores (incluyendo Mega par
 let linksCache        = {}
 let dirty             = false
 let searchTimer       = null
+let letrasCache       = {}   // { 'A': { grupo:'A', completada:false }, ... }
+let animeCountByLetra = {}   // { 'A': 45, 'B': 12, ... }
 
 // ─────────────────────────────────────────────────────
 //  AUTENTICACIÓN
@@ -177,6 +186,8 @@ async function startApp() {
     allGeneros = gens || []
 
     await loadStats()
+    await loadLetras()         // cargar asignaciones de letras
+    setInterval(loadLetras, 45_000)  // sincronizar letras cada 45s
     if (currentProfile === 'redes') await loadColaRedes()
     setupSearch()
 
@@ -967,6 +978,158 @@ async function loadColaRedes() {
       <span class="queue-arrow">→</span>
     </div>
   `).join('')
+}
+
+// ─────────────────────────────────────────────────────
+//  LETRAS DEL CATÁLOGO
+// ─────────────────────────────────────────────────────
+async function loadLetras() {
+  // 1. Cargar asignaciones de la BD
+  const { data: asigs } = await db.from('asignaciones_letras').select('*')
+  letrasCache = {}
+  ;(asigs || []).forEach(r => {
+    letrasCache[r.letra.toUpperCase()] = { grupo: r.grupo, completada: r.completada }
+  })
+
+  // 2. Contar animes por letra (una sola query)
+  const { data: titulosData } = await db.from('animes').select('titulo')
+  animeCountByLetra = {}
+  ;(titulosData || []).forEach(a => {
+    const first = (a.titulo || '')[0]?.toUpperCase()
+    const key = first && /[A-Z]/.test(first) ? first : '#'
+    animeCountByLetra[key] = (animeCountByLetra[key] || 0) + 1
+  })
+
+  renderLetrasGrid()
+}
+
+async function claimLetra(letra) {
+  if (!currentSession?.group) return   // Redes no puede reclamar
+  const myGroup = currentSession.group
+  const existing = letrasCache[letra]
+
+  // Letra completada → no se puede tocar
+  if (existing?.completada) return
+
+  // De otro grupo → bloqueada
+  if (existing?.grupo && existing.grupo !== myGroup) return
+
+  if (existing?.grupo === myGroup) {
+    // Liberar mi letra
+    const { error } = await db.from('asignaciones_letras').delete().eq('letra', letra)
+    if (error) { showToast('Error al liberar: ' + error.message, 'error'); return }
+    delete letrasCache[letra]
+    showToast(`Letra "${letra}" liberada`, 'info')
+  } else {
+    // Reclamar
+    const { error } = await db.from('asignaciones_letras')
+      .upsert({ letra, grupo: myGroup, completada: false })
+    if (error) { showToast('Error al reclamar: ' + error.message, 'error'); return }
+    letrasCache[letra] = { grupo: myGroup, completada: false }
+    showToast(`Letra "${letra}" asignada al Grupo ${myGroup} ✅`, 'success')
+  }
+  renderLetrasGrid()
+}
+
+async function checkCompletadas() {
+  const toCheck = Object.entries(letrasCache)
+    .filter(([, info]) => info.grupo && !info.completada)
+    .map(([l]) => l)
+
+  if (toCheck.length === 0) { showToast('No hay letras para verificar', 'info'); return }
+
+  showToast('Verificando letras...', 'info')
+
+  // Obtener todos los animes con sus ids y primeras letras
+  const { data: allAnimes } = await db.from('animes').select('id_anime, titulo')
+  const animesByLetra = {}
+  ;(allAnimes || []).forEach(a => {
+    const first = (a.titulo || '')[0]?.toUpperCase()
+    const key = first && /[A-Z]/.test(first) ? first : '#'
+    if (!animesByLetra[key]) animesByLetra[key] = []
+    animesByLetra[key].push(a.id_anime)
+  })
+
+  let newDone = 0
+  for (const letra of toCheck) {
+    const ids = animesByLetra[letra] || []
+    if (ids.length === 0) continue
+
+    const [{ count: total }, { count: done }] = await Promise.all([
+      db.from('episodios').select('*', { count: 'exact', head: true }).in('id_anime', ids),
+      db.from('episodios').select('*', { count: 'exact', head: true })
+        .in('id_anime', ids).eq('estado_experto', 'completado').eq('estado_links', 'completado')
+    ])
+
+    if (total && total > 0 && done === total) {
+      await db.from('asignaciones_letras').update({ completada: true }).eq('letra', letra)
+      letrasCache[letra].completada = true
+      newDone++
+    }
+  }
+
+  showToast(
+    newDone > 0 ? `¡${newDone} letra${newDone > 1 ? 's' : ''} completada${newDone > 1 ? 's' : ''}! 🎉` : 'Ninguna completada aún',
+    newDone > 0 ? 'success' : 'info'
+  )
+  renderLetrasGrid()
+}
+
+function renderLetrasGrid() {
+  const gridEl    = document.getElementById('letrasGrid')
+  const summaryEl = document.getElementById('letrasSummary')
+  if (!gridEl) return
+
+  const myGroup = currentSession?.group
+
+  // ── Resumen por grupo ──
+  if (summaryEl) {
+    const byGroup = { A: [], B: [], C: [] }
+    Object.entries(letrasCache).forEach(([l, info]) => {
+      if (info.grupo && byGroup[info.grupo]) byGroup[info.grupo].push(l)
+    })
+    summaryEl.innerHTML = ['A', 'B', 'C'].map(g => {
+      const c = GRUPO_COLORS[g]
+      const letters = byGroup[g].sort().join(' · ') || '—'
+      return `
+        <div class="grupo-row" style="border-color:${c.border}">
+          <span class="grupo-tag-sm" style="background:${c.bg};color:${c.text}">Grupo ${g}</span>
+          <span class="grupo-letras-sm">${letters}</span>
+        </div>`
+    }).join('')
+  }
+
+  // ── Grid de letras ──
+  gridEl.innerHTML = LETRAS.map(letra => {
+    const info        = letrasCache[letra]
+    const completed   = info?.completada
+    const claimedBy   = info?.grupo
+    const isMine      = claimedBy === myGroup
+    const isOthers    = claimedBy && claimedBy !== myGroup
+    const canClick    = !completed && !isOthers && !!myGroup
+    const c           = claimedBy ? GRUPO_COLORS[claimedBy] : null
+    const count       = animeCountByLetra[letra] || 0
+
+    let bgStyle = ''
+    if (completed)   bgStyle = 'background:rgba(16,185,129,.18);border-color:rgba(16,185,129,.5);color:#10B981'
+    else if (c)      bgStyle = `background:${c.bg};border-color:${c.border};color:${c.text}`
+
+    const tooltip = completed
+      ? `${letra} — ✅ Completada (${count} animes)`
+      : claimedBy
+        ? `${letra} — Grupo ${claimedBy} · ${count} animes${isMine ? ' (clic para liberar)' : ''}`
+        : `${letra} — ${count} animes · Clic para reclamar`
+
+    return `
+      <div class="letra-cell ${completed ? 'lc-done' : isMine ? 'lc-mine' : isOthers ? 'lc-others' : 'lc-free'}"
+           style="${bgStyle}"
+           onclick="${canClick ? `claimLetra('${letra}')` : ''}"
+           title="${tooltip}">
+        <span class="letra-char">${completed ? '✓' : letra}</span>
+        ${claimedBy && !completed ? `<span class="letra-badge">${claimedBy}</span>` : ''}
+        ${count > 0 ? `<span class="letra-count">${count}</span>` : ''}
+      </div>`
+  }).join('')
 }
 
 // ─────────────────────────────────────────────────────
