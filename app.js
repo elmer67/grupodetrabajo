@@ -444,7 +444,7 @@ function renderExperto() {
           <div class="genre-add-row" id="studioAddRow" style="${currentAnime.studio ? 'display:none;' : 'display:flex;'}">
             <select class="genre-select" id="studioSelect">
               <option value="">+ Seleccionar estudio...</option>
-              ${allStudios.map(s => `<option value="${s.id_estudio}">${escapeHtml(s.nombre)}</option>`).join('')}
+              ${allStudios.map(s => `<option value="${escapeAttr(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}
             </select>
             <button class="btn-secondary" onclick="addStudio()" style="padding:10px 16px;font-size:13px">Agregar</button>
             <button class="btn-secondary" onclick="createNewStudio()" style="padding:10px 14px;font-size:13px;background:rgba(236,72,153,.15);border-color:rgba(236,72,153,.3);color:#ec4899;" title="Crear nuevo estudio">➕ Nuevo</button>
@@ -490,10 +490,8 @@ function buildGenreChips() {
 
 function buildStudioChip() {
   if (!currentAnime.studio) return '<span class="no-genres">Sin estudio asignado</span>'
-  const st = allStudios.find(s => s.id_estudio == currentAnime.studio)
-  const stName = st ? st.nombre : currentAnime.studio
   return `<span class="genre-chip">
-    ${escapeHtml(stName)}
+    ${escapeHtml(currentAnime.studio)}
     <span class="chip-x" onclick="removeStudio()" title="Quitar">✕</span>
   </span>`
 }
@@ -580,9 +578,9 @@ function refreshGenreUI() {
 
 function addStudio() {
   const sel = document.getElementById('studioSelect')
-  const id = parseInt(sel.value)
-  if (!id) return
-  currentAnime.studio = id
+  const val = sel.value
+  if (!val) return
+  currentAnime.studio = val
   markDirty()
   refreshStudioUI()
 }
@@ -602,7 +600,7 @@ function refreshStudioUI() {
   const sel = document.getElementById('studioSelect')
   if (sel) {
     sel.innerHTML = `<option value="">+ Seleccionar estudio...</option>` +
-      allStudios.map(s => `<option value="${s.id_estudio}">${escapeHtml(s.nombre)}</option>`).join('')
+      allStudios.map(s => `<option value="${escapeAttr(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')
     sel.value = ''
   }
   renderUnsavedBanner()
@@ -615,7 +613,10 @@ async function createNewStudio() {
   const cleanName = nombre.trim()
   const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
   
-  const { data, error } = await db.from('estudios').insert([{ nombre: cleanName, slug }]).select()
+  const maxId = allStudios.reduce((max, s) => Math.max(max, parseInt(s.id_estudio) || 0), 204)
+  const nextId = maxId + 1
+
+  const { data, error } = await db.from('estudios').insert([{ id_estudio: nextId, nombre: cleanName, slug }]).select()
   if (error) {
     showToast('Error al crear estudio: ' + error.message, 'error')
     return
@@ -626,10 +627,10 @@ async function createNewStudio() {
     allStudios.push(newStudio)
     allStudios.sort((a,b) => a.nombre.localeCompare(b.nombre))
     
-    currentAnime.studio = newStudio.id_estudio
+    currentAnime.studio = newStudio.nombre
     markDirty()
     refreshStudioUI()
-    showToast(`Estudio "${newStudio.nombre}" creado y asignado`, 'success')
+    showToast(`Estudio "${newStudio.nombre}" creado y asignado. ¡Recuerda Guardar Cambios!`, 'success')
   }
 }
 
