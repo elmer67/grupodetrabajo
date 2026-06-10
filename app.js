@@ -825,13 +825,19 @@ function buildEpBlockRedes(ep) {
           <div class="server-grid">
             ${embedServers.map(s => {
               const lv    = cache.embed[s.id_servidor]
-              const val   = lv?.url_video || ''
+              let val     = lv?.url_video || ''
               const isMp4 = mp4Server && s.id_servidor === mp4Server.id_servidor
+              
+              if (isMp4 && !val && mp4Url) {
+                const m = mp4Url.match(/mp4upload\.com\/([a-zA-Z0-9]+)/);
+                if (m) val = `https://www.mp4upload.com/embed-${m[1]}.html`;
+              }
+
               return `
                 <div class="server-field">
                   <div class="server-label">
                     <span class="sdot ${val ? 'filled' : ''}" id="dot_${ep.id_episodio}_${s.id_servidor}"></span>
-                    ${isMp4 ? '<span style="color:#00b894">MP4UPLOAD <small style="font-size:8px">(EMBED)</small></span>' : escapeHtml(s.nombre)}
+                    ${isMp4 ? '<span style="color:#00b894">MP4UPLOAD</span>' : escapeHtml(s.nombre)}
                   </div>
                   <input type="url" class="input"
                     value="${escapeAttr(val)}"
@@ -854,7 +860,7 @@ function buildEpBlockRedes(ep) {
             <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="toggleManualDl(${ep.id_episodio})">✏️ Edición Manual</button>
           </div>
           <div class="server-grid dl-grid-${ep.id_episodio}">
-            ${embedServers.map(s => {
+            ${embedServers.filter(s => !(mp4Server && s.id_servidor === mp4Server.id_servidor)).map(s => {
               const lv = cache.descargas[s.id_servidor]
               const val = lv?.url_video || ''
               
