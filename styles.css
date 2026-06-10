@@ -125,6 +125,17 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Header Stats */
+.header-left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
 .header-stats {
   display: flex;
   gap: 24px;
