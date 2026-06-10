@@ -460,7 +460,12 @@ function buildGenreChips() {
 function buildEpBlockExperto(ep, forceNum = null) {
   const num   = ep ? ep.numero : forceNum
   const epId  = ep ? ep.id_episodio : `new_${Date.now()}_${Math.random().toString(36).slice(2,6)}`
-  const preg  = ep ? (ep.pregunta_akinator || '') : ''
+  let preg  = ep ? (ep.pregunta_akinator || '') : ''
+  const prefix = '¿El hentai que buscas tiene '
+  const suffix = '?'
+  if (preg.startsWith(prefix) && preg.endsWith(suffix)) {
+    preg = preg.slice(prefix.length, -suffix.length).trim()
+  }
   const cache = ep ? linksCache[ep.id_episodio] : null
   const mp4  = cache?.mp4?.url_video || ''
   const done  = ep && ep.estado_experto === 'completado'
@@ -488,11 +493,15 @@ function buildEpBlockExperto(ep, forceNum = null) {
         </div>
         <div class="form-group">
           <label>❓ Pregunta Akinator</label>
-          <input type="text" class="input preg-in"
-            value="${escapeAttr(preg)}"
-            placeholder="Escribe una pregunta única sobre este capítulo..."
-            data-ep-id="${epId}"
-            oninput="markDirty()" />
+          <div class="input-preg-wrapper">
+            <span class="preg-prefix">¿El hentai que buscas tiene</span>
+            <input type="text" class="input preg-in"
+              value="${escapeAttr(preg)}"
+              placeholder="elfas masoquistas..."
+              data-ep-id="${epId}"
+              oninput="markDirty()" />
+            <span class="preg-suffix">?</span>
+          </div>
         </div>
       </div>
     </div>`
@@ -643,7 +652,10 @@ async function saveExperto(silent = false) {
       const mp4In  = block.querySelector('.mp4-in')
       const pregIn  = block.querySelector('.preg-in')
       const mp4Url = mp4In?.value.trim() || ''
-      const preg    = pregIn?.value.trim() || ''
+      let preg    = pregIn?.value.trim() || ''
+      if (preg) {
+        preg = `¿El hentai que buscas tiene ${preg}?`
+      }
 
       // Validar URL si se ingresó
       if (mp4Url && !validateUrl(mp4Url)) {
