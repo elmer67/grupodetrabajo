@@ -421,6 +421,18 @@ function renderExperto() {
         </div>
       </div>
 
+      <!-- AÑO Y ESTUDIO -->
+      <div style="display:flex; gap:16px; margin-bottom:24px;">
+        <div class="form-group" style="flex:1; margin-bottom:0;">
+          <label>📅 Año</label>
+          <input type="number" class="input" id="animeAno" value="${currentAnime['año'] || ''}" placeholder="Ej. 2024" oninput="markDirty()" />
+        </div>
+        <div class="form-group" style="flex:1; margin-bottom:0;">
+          <label>🏢 Estudio</label>
+          <input type="text" class="input" id="animeStudio" value="${escapeAttr(currentAnime.studio || '')}" placeholder="Ej. Pink Pineapple" oninput="markDirty()" />
+        </div>
+      </div>
+
       <!-- CAPÍTULOS -->
       <div class="form-group">
         <label>📚 Capítulos</label>
@@ -642,6 +654,18 @@ async function saveExperto(silent = false) {
       }))
       const { error } = await db.from('anime_generos').insert(rows)
       if (error) throw error
+    }
+
+    // ── 1.5. Año y Estudio ───────────────────────────
+    const newAnoInput = document.getElementById('animeAno')?.value
+    const newAno = newAnoInput ? parseInt(newAnoInput) : null
+    const newStudio = document.getElementById('animeStudio')?.value?.trim() || null
+    
+    if (currentAnime['año'] !== newAno || currentAnime.studio !== newStudio) {
+      const { error: updErr } = await db.from('animes').update({ 'año': newAno, studio: newStudio }).eq('id_anime', currentAnime.id_anime)
+      if (updErr) throw updErr
+      currentAnime['año'] = newAno
+      currentAnime.studio = newStudio
     }
 
     // ── 2. Episodios ─────────────────────────────────
