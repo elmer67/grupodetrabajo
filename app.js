@@ -450,10 +450,11 @@ function renderExperto() {
           <label>🏢 Estudio</label>
           <div class="genres-wrap" id="studioWrap" style="margin-bottom:6px;">${buildStudioChip()}</div>
           <div class="genre-add-row" id="studioAddRow" style="display:flex;">
-            <select class="genre-select" id="studioSelect">
-              <option value="">+ Seleccionar estudio...</option>
-              ${allStudios.map(s => `<option value="${escapeAttr(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}
-            </select>
+              <select class="genre-select" id="studioSelect">
+                <option value="">+ Seleccionar estudio...</option>
+                ${allStudios.filter(s => !currentEstudioIds.has(s.id_estudio))
+                  .map(s => `<option value="${s.id_estudio}">${escapeHtml(s.nombre)}</option>`).join('')}
+              </select>
             <button class="btn-secondary" onclick="addStudio()" style="padding:10px 16px;font-size:13px">Agregar</button>
             <button class="btn-secondary" onclick="createNewStudio()" style="padding:10px 14px;font-size:13px;background:rgba(236,72,153,.15);border-color:rgba(236,72,153,.3);color:#ec4899;" title="Crear nuevo estudio">➕ Nuevo</button>
           </div>
