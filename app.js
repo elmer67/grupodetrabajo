@@ -1,4 +1,4 @@
-/* ═══════════════════════════════════════════════════════
+﻿/* ═══════════════════════════════════════════════════════
    HentaiLA Admin — app.js
    Vanilla JS + Supabase JS v2 (CDN)
    ═══════════════════════════════════════════════════════ */
@@ -358,7 +358,7 @@ async function selectAnime(id) {
         .from('links_videos').select('*').in('id_episodio', epIds)
 
       ;(lv || []).forEach(l => {
-        if (!linksCache[l.id_episodio]) linksCache[l.id_episodio] = { mp4: null, embed: {} }
+        if (!linksCache[l.id_episodio]) linksCache[l.id_episodio] = { mp4: null, embed: {}, descargas: {} }
         if (l.es_descarga) {
           linksCache[l.id_episodio].mp4 = l
         } else {
@@ -697,7 +697,7 @@ async function saveExperto(silent = false) {
 
       // ── Link MP4Upload ──
       if (mp4Server && mp4Url) {
-        if (!linksCache[episodioId]) linksCache[episodioId] = { mp4: null, embed: {} }
+        if (!linksCache[episodioId]) linksCache[episodioId] = { mp4: null, embed: {}, descargas: {} }
         const existMp4 = linksCache[episodioId].mp4
 
         if (existMp4) {
@@ -783,7 +783,7 @@ function renderRedes() {
 }
 
 function buildEpBlockRedes(ep) {
-  const cache      = linksCache[ep.id_episodio] || { mp4: null, embed: {} }
+  const cache      = linksCache[ep.id_episodio] || { mp4: null, embed: {}, descargas: {} }
   const mp4Url    = cache.mp4?.url_video || ''
   const filled     = embedServers.filter(s => cache.embed[s.id_servidor]?.url_video).length
   const total      = embedServers.length
@@ -811,48 +811,136 @@ function buildEpBlockRedes(ep) {
           <div class="mp4-display">
             ${mp4Url
               ? `<span class="mp4-url" title="${escapeAttr(mp4Url)}">${escapeHtml(mp4Url)}</span>
-                 <a class="mp4-open" href="${escapeAttr(mp4Url)}" target="_blank" rel="noopener noreferrer">Descargar ↗</a>`
+                 <div style="display:flex; gap:8px;">
+     <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="copyFakeName(${ep.numero}, ${currentAnime.id_anime}, `${escapeAttr(ep.titulo_episodio || ')}`)">📋 Copiar Nombre Falso</button>
+     <a class="mp4-open" href="${escapeAttr(mp4Url)}" target="_blank" rel="noopener noreferrer">Descargar ↗</a>
+   </div>`
               : `<span class="mp4-no-url">El Experto aún no ha subido el link de descarga de MP4Upload</span>`}
           </div>
         </div>
 
         <!-- REPRODUCTORES: todos los servidores (MP4Upload incluido como embed) -->
         <div class="form-group">
-          <label>🎬 Reproductores (${filled}/${total} listos)</label>
+          <label>?? Reproductores (Embed) (<span id="epFilledCount_"></span>/ listos)</label>
           <div class="server-grid">
             ${embedServers.map(s => {
               const lv    = cache.embed[s.id_servidor]
               const val   = lv?.url_video || ''
               const isMp4 = mp4Server && s.id_servidor === mp4Server.id_servidor
-              return `
+              return \
                 <div class="server-field">
                   <div class="server-label">
-                    <span class="sdot ${val ? 'filled' : ''}" id="dot_${ep.id_episodio}_${s.id_servidor}"></span>
-                    ${escapeHtml(s.nombre)}${isMp4 ? ' <span style="font-size:9px;color:var(--text-dim);font-weight:400">(embed)</span>' : ''}
+                    <span class="sdot \" id="dot_\_\"></span>
+                    \`\
                   </div>
                   <input type="url" class="input"
-                    value="${escapeAttr(val)}"
-                    placeholder="${isMp4 ? 'https://www.mp4upload.com/...ed/...' : 'https://...'}"
-                    data-ep-id="${ep.id_episodio}"
-                    data-server-id="${s.id_servidor}"
-                    data-link-id="${lv?.id_link || ''}"
+                    value="\"
+                    placeholder="\"
+                    data-ep-id="\"
+                    data-server-id="\"
+                    data-server-name="\"
+                    data-link-id="\"
                     oninput="markDirty(); onServerInput(this)"
                     onchange="validateUrlInput(this)" />
-                </div>`
+                </div>\
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- LINKS DE DESCARGA (Auto-generados) -->
+        <div class="form-group" style="margin-top: 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label style="margin:0;">?? Links de Descarga (Auto-generados)</label>
+            <button class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="toggleManualDl(\)">?? Edici�n Manual</button>
+          </div>
+          <div class="server-grid dl-grid-\">
+            ${embedServers.map(s => {
+              const lv = cache.descargas[s.id_servidor]
+              const val = lv?.url_video || ''
+              
+              return \
+                <div class="server-field">
+                  <div class="server-label">
+                    <span class="sdot \" id="dot_dl_\_\"></span>
+                    \
+                  </div>
+                  <input type="url" class="input dl-input-\"
+                    value="\"
+                    placeholder="Auto-generado"
+                    data-ep-id="\"
+                    data-server-id="\"
+                    data-link-id="\"
+                    oninput="markDirty(); onDlInput(this)"
+                    onchange="validateUrlInput(this)"
+                    readonly />
+                </div>\
             }).join('')}
           </div>
         </div>
       </div>
-    </div>`
+    </div>\
+}
+
+function toggleManualDl(epId) {
+  const inputs = document.querySelectorAll(\.dl-input-\\\);
+  let isReadonly = false;
+  inputs.forEach(input => {
+    if(input.hasAttribute('readonly')) {
+      input.removeAttribute('readonly');
+      isReadonly = true;
+    } else {
+      input.setAttribute('readonly', 'true');
+    }
+  });
+  showToast(isReadonly ? 'Edici�n manual activada' : 'Modo auto-generado activado', 'info');
+}
+
+function onDlInput(input) {
+  const epId = input.dataset.epId;
+  const servId = input.dataset.serverId;
+  const val = input.value.trim();
+  const dot = document.getElementById(\dot_dl_\\\_\\\);
+  if (dot) dot.classList.toggle('filled', !!val);
 }
 
 function onServerInput(input) {
   const epId   = input.dataset.epId
   const servId = input.dataset.serverId
-  const filled = !!input.value.trim()
+  const sName  = input.dataset.serverName || ''
+  const val    = input.value.trim()
+  const filled = !!val
 
   // Actualizar dot
   const dot = document.getElementById(`dot_${epId}_${servId}`)
+  if (dot) dot.classList.toggle('filled', filled)
+
+  // AUTO-FILL DOWNLOAD LINK
+  const dlInput = document.querySelector(`.dl-input-${epId}[data-server-id="${servId}"]`)
+  if (dlInput && dlInput.hasAttribute('readonly')) {
+    const derived = deriveDownloadLink(sName, val)
+    dlInput.value = derived
+    onDlInput(dlInput)
+  }
+
+  // Actualizar estado del bloque
+  const block  = input.closest('.ep-block')
+  if (!block) return
+  const inputs = [...block.querySelectorAll('input[data-server-name]')]
+  const nFilled = inputs.filter(i => i.value.trim()).length
+  const nTotal  = embedServers.length
+  const statEl  = document.getElementById(`epStat_${epId}`)
+  
+  const epFilledCount = document.getElementById(`epFilledCount_${epId}`)
+  if (epFilledCount) epFilledCount.textContent = nFilled
+
+  if (statEl) {
+    statEl.innerHTML = nFilled === nTotal
+      ? `✅ <small>${nFilled}/${nTotal}</small>`
+      : nFilled > 0
+        ? `⚠️ <small>${nFilled}/${nTotal}</small>`
+        : `⚪ <small>0/${nTotal}</small>`
+  }
+}_${servId}`)
   if (dot) dot.classList.toggle('filled', filled)
 
   // Actualizar estado del bloque
@@ -894,6 +982,7 @@ async function saveRedes(silent = false) {
       for (const input of inputs) {
         const url    = input.value.trim()
         const servId = parseInt(input.dataset.serverId)
+        const isDescarga = input.className.includes('dl-input')
         const linkId = input.dataset.linkId ? parseInt(input.dataset.linkId) : null
 
         if (url && !validateUrl(url)) {
@@ -912,14 +1001,19 @@ async function saveRedes(silent = false) {
             id_episodio: epId,
             id_servidor: servId,
             url_video:   url,
-            es_descarga: false,
+            es_descarga: isDescarga,
             idioma:      'sub'
           }).select().single()
           if (error) throw error
           input.dataset.linkId = nl.id_link
-          if (!linksCache[epId])        linksCache[epId] = { mp4: linksCache[epId]?.mp4 || null, embed: {} }
-          if (!linksCache[epId].embed)  linksCache[epId].embed = {}
-          linksCache[epId].embed[servId] = nl
+          if (!linksCache[epId])        linksCache[epId] = { mp4: linksCache[epId]?.mp4 || null, embed: {}, descargas: {} }
+          if (!linksCache[epId].embed) linksCache[epId].embed = {}
+          if (!linksCache[epId].descargas) linksCache[epId].descargas = {}
+          if (isDescarga) {
+            linksCache[epId].descargas[servId] = nl
+          } else {
+            linksCache[epId].embed[servId] = nl
+          }
         }
       }
 
@@ -1252,6 +1346,40 @@ async function autoSave() {
 // ─────────────────────────────────────────────────────
 //  UTILIDADES
 // ─────────────────────────────────────────────────────
+function deriveDownloadLink(serverName, embedUrl) {
+  if (!embedUrl) return '';
+  const url = embedUrl.trim();
+  const name = (serverName || '').toLowerCase();
+  
+  if (name.includes('mp4upload')) {
+    const match = url.match(/\/embed-([^.]+)\.html/);
+    if (match) return https://www.mp4upload.com/ + match[1];
+  }
+  else if (name.includes('mega')) {
+    return url.replace('/embed/', '/file/');
+  }
+  else if (name.includes('yourupload')) {
+    return url.replace('/embed/', '/watch/');
+  }
+  else if (name.includes('voe')) {
+    const match = url.match(/\/e\/([^\/]+)$/);
+    if (match) return url.replace(/e/ + match[1], / + match[1]);
+  }
+  else if (name.includes('vidhide')) {
+    return url.replace('/embed/', '/v/');
+  }
+  else if (name.includes('netu')) {
+    const match = url.match(/vid=([^&]+)/) || url.match(/v=([^&]+)/);
+    if (match) {
+      try {
+        const urlObj = new URL(url);
+        return urlObj.origin + '/watch_video.php?v=' + match[1];
+      } catch (e) {}
+    }
+  }
+  
+  return url;
+}
 function validateUrl(url) {
   return /^https?:\/\/.+/.test(url)
 }
@@ -1294,5 +1422,12 @@ function setText(id, val) {
   const el = document.getElementById(id)
   if (el) el.textContent = val
 }
+
+
+
+
+
+
+
 
 
