@@ -27,9 +27,9 @@ function imgPath(dbPath) {
 //  CONTRASEÑAS — config de grupos
 // ─────────────────────────────────────────────────────
 const SESSIONS = {
-  'hideki123': { profile: 'experto', group: 'A', members: ['jf', 'hideki'] },
-  'ortiz123':  { profile: 'experto', group: 'B', members: ['osorio', 'ortiz'] },
-  'kish123':   { profile: 'experto', group: 'C', members: ['kish'] },
+  'hideki123': { profile: 'experto', group: 'A', members: ['Jean Franco', 'Hideki'] },
+  'ortiz123':  { profile: 'experto', group: 'B', members: ['Osorio', 'Ortiz'] },
+  'kish123':   { profile: 'experto', group: 'C', members: ['Kish'] },
   'flower123': { profile: 'redes',   group: null, members: null }
 }
 
