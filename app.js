@@ -189,10 +189,9 @@ async function startApp() {
     allGeneros = gens || []
 
     // Cargar estudios
-    const { data: stds, error: stErr } = await db.from('animes').select('studio').not('studio', 'is', null)
-    if (!stErr && stds) {
-      allStudios = [...new Set(stds.map(s => s.studio).filter(Boolean))].sort()
-    }
+    const { data: stds, error: stErr } = await db.from('estudios').select('*').order('nombre')
+    if (stErr) throw stErr
+    allStudios = stds || []
 
     await loadStats()
     await loadLetras()         // cargar asignaciones de letras
@@ -443,10 +442,10 @@ function renderExperto() {
           <label>🏢 Estudio</label>
           <div class="genres-wrap" id="studioWrap" style="margin-bottom:6px;">${buildStudioChip()}</div>
           <div class="genre-add-row" id="studioAddRow" style="${currentAnime.studio ? 'display:none;' : 'display:flex;'}">
-            <input type="text" class="genre-select" id="studioInput" list="studioList" placeholder="+ Agregar estudio..." />
-            <datalist id="studioList">
-              ${allStudios.map(s => `<option value="${escapeAttr(s)}">`).join('')}
-            </datalist>
+            <select class="genre-select" id="studioSelect">
+              <option value="">+ Seleccionar estudio...</option>
+              ${allStudios.map(s => `<option value="${s.id_estudio}">${escapeHtml(s.nombre)}</option>`).join('')}
+            </select>
             <button class="btn-secondary" onclick="addStudio()" style="padding:10px 16px;font-size:13px">Agregar</button>
           </div>
         </div>
@@ -490,8 +489,10 @@ function buildGenreChips() {
 
 function buildStudioChip() {
   if (!currentAnime.studio) return '<span class="no-genres">Sin estudio asignado</span>'
+  const st = allStudios.find(s => s.id_estudio == currentAnime.studio)
+  const stName = st ? st.nombre : currentAnime.studio
   return `<span class="genre-chip">
-    ${escapeHtml(currentAnime.studio)}
+    ${escapeHtml(stName)}
     <span class="chip-x" onclick="removeStudio()" title="Quitar">✕</span>
   </span>`
 }
@@ -577,11 +578,10 @@ function refreshGenreUI() {
 }
 
 function addStudio() {
-  const inp = document.getElementById('studioInput')
-  const val = inp.value.trim()
-  if (!val) return
-  currentAnime.studio = val
-  inp.value = ''
+  const sel = document.getElementById('studioSelect')
+  const id = parseInt(sel.value)
+  if (!id) return
+  currentAnime.studio = id
   markDirty()
   refreshStudioUI()
 }
@@ -597,6 +597,12 @@ function refreshStudioUI() {
   const addRow = document.getElementById('studioAddRow')
   if (addRow) {
     addRow.style.display = currentAnime.studio ? 'none' : 'flex'
+  }
+  const sel = document.getElementById('studioSelect')
+  if (sel) {
+    sel.innerHTML = `<option value="">+ Seleccionar estudio...</option>` +
+      allStudios.map(s => `<option value="${s.id_estudio}">${escapeHtml(s.nombre)}</option>`).join('')
+    sel.value = ''
   }
   renderUnsavedBanner()
 }
