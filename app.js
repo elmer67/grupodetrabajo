@@ -1,4 +1,4 @@
-﻿/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    HentaiLA Admin — app.js
    Vanilla JS + Supabase JS v2 (CDN)
    ═══════════════════════════════════════════════════════ */
@@ -1336,7 +1336,7 @@ function deriveDownloadLink(serverName, embedUrl) {
   
   if (name.includes('mp4upload')) {
     const match = url.match(/\/embed-([^.]+)\.html/);
-    if (match) return https://www.mp4upload.com/ + match[1];
+    if (match) return 'https://www.mp4upload.com/' + match[1];
   }
   else if (name.includes('mega')) {
     return url.replace('/embed/', '/file/');
@@ -1346,7 +1346,7 @@ function deriveDownloadLink(serverName, embedUrl) {
   }
   else if (name.includes('voe')) {
     const match = url.match(/\/e\/([^\/]+)$/);
-    if (match) return url.replace(/e/ + match[1], / + match[1]);
+    if (match) return url.replace('/e/' + match[1], '/d/' + match[1]);
   }
   else if (name.includes('vidhide')) {
     return url.replace('/embed/', '/v/');
