@@ -758,13 +758,12 @@ async function saveExperto(silent = false) {
     // ── 1.5. Año y Estudio ───────────────────────────
     const newAnoInput = document.getElementById('animeAno')?.value
     const newAno = newAnoInput ? parseInt(newAnoInput) : null
-    const newStudio = document.getElementById('animeStudio')?.value?.trim() || null
+    const newStudio = currentAnime.studio
     
-    if (currentAnime['año'] !== newAno || currentAnime.studio !== newStudio) {
+    if (currentAnime['año'] !== newAno || originalAnimeStudio !== newStudio) {
       const { error: updErr } = await db.from('animes').update({ 'año': newAno, studio: newStudio }).eq('id_anime', currentAnime.id_anime)
       if (updErr) throw updErr
       currentAnime['año'] = newAno
-      currentAnime.studio = newStudio
     }
 
     // ── 2. Episodios ─────────────────────────────────
