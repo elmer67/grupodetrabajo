@@ -447,6 +447,7 @@ function renderExperto() {
               ${allStudios.map(s => `<option value="${s.id_estudio}">${escapeHtml(s.nombre)}</option>`).join('')}
             </select>
             <button class="btn-secondary" onclick="addStudio()" style="padding:10px 16px;font-size:13px">Agregar</button>
+            <button class="btn-secondary" onclick="createNewStudio()" style="padding:10px 14px;font-size:13px;background:rgba(236,72,153,.15);border-color:rgba(236,72,153,.3);color:#ec4899;" title="Crear nuevo estudio">➕ Nuevo</button>
           </div>
         </div>
       </div>
@@ -605,6 +606,31 @@ function refreshStudioUI() {
     sel.value = ''
   }
   renderUnsavedBanner()
+}
+
+async function createNewStudio() {
+  const nombre = prompt('Ingresa el nombre del nuevo estudio:')
+  if (!nombre || !nombre.trim()) return
+
+  const cleanName = nombre.trim()
+  const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+  
+  const { data, error } = await db.from('estudios').insert([{ nombre: cleanName, slug }]).select()
+  if (error) {
+    showToast('Error al crear estudio: ' + error.message, 'error')
+    return
+  }
+  
+  if (data && data.length > 0) {
+    const newStudio = data[0]
+    allStudios.push(newStudio)
+    allStudios.sort((a,b) => a.nombre.localeCompare(b.nombre))
+    
+    currentAnime.studio = newStudio.id_estudio
+    markDirty()
+    refreshStudioUI()
+    showToast(`Estudio "${newStudio.nombre}" creado y asignado`, 'success')
+  }
 }
 
 // Banner de cambios no guardados en géneros y detalles
