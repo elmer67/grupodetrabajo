@@ -50,6 +50,9 @@ let currentEpisodios  = []
 let currentGeneroIds  = new Set()   // ids de géneros del anime activo (estado actual)
 let originalGeneroIds = new Set()   // ids originales antes de editar (para revertir)
 let allGeneros        = []          // todos los géneros disponibles
+let allStudios        = []          // todos los estudios disponibles
+let originalAnimeAno  = null        // año original antes de editar
+let originalAnimeStudio = null      // estudio original antes de editar
 let allServidores     = []          // todos los servidores de BD
 let mp4Server        = null        // { id_servidor, nombre: 'MP4Upload' }
 let embedServers      = []          // todos los servidores (incluyendo mp4 para embed)
@@ -184,6 +187,12 @@ async function startApp() {
       .from('generos').select('*').order('nombre')
     if (gErr) throw gErr
     allGeneros = gens || []
+
+    // Cargar estudios
+    const { data: stds, error: stErr } = await db.from('animes').select('studio').not('studio', 'is', null)
+    if (!stErr && stds) {
+      allStudios = [...new Set(stds.map(s => s.studio).filter(Boolean))].sort()
+    }
 
     await loadStats()
     await loadLetras()         // cargar asignaciones de letras
@@ -349,6 +358,9 @@ async function selectAnime(id) {
       .from('anime_generos').select('id_genero').eq('id_anime', id)
     currentGeneroIds  = new Set((ag || []).map(x => x.id_genero))
     originalGeneroIds = new Set(currentGeneroIds)  // snapshot para revertir
+    
+    originalAnimeAno = anime['año']
+    originalAnimeStudio = anime.studio
 
     // 4. Links de video de todos los episodios
     linksCache = {}
@@ -422,14 +434,17 @@ function renderExperto() {
       </div>
 
       <!-- AÑO Y ESTUDIO -->
-      <div style="display:flex; gap:16px; margin-bottom:24px;">
+      <div id="animeDetailsRow" style="display:flex; gap:16px; margin-bottom:24px;">
         <div class="form-group" style="flex:1; margin-bottom:0;">
           <label>📅 Año</label>
-          <input type="number" class="input" id="animeAno" value="${currentAnime['año'] || ''}" placeholder="Ej. 2024" oninput="markDirty()" />
+          <input type="number" class="input" id="animeAno" value="${currentAnime['año'] || ''}" placeholder="Ej. 2024" oninput="markDirty(); renderUnsavedBanner()" />
         </div>
         <div class="form-group" style="flex:1; margin-bottom:0;">
           <label>🏢 Estudio</label>
-          <input type="text" class="input" id="animeStudio" value="${escapeAttr(currentAnime.studio || '')}" placeholder="Ej. Pink Pineapple" oninput="markDirty()" />
+          <input type="text" class="input" id="animeStudio" value="${escapeAttr(currentAnime.studio || '')}" placeholder="Ej. Pink Pineapple" list="studioList" oninput="markDirty(); renderUnsavedBanner()" />
+          <datalist id="studioList">
+            ${allStudios.map(s => `<option value="${escapeAttr(s)}">`).join('')}
+          </datalist>
         </div>
       </div>
 
@@ -549,10 +564,19 @@ function refreshGenreUI() {
   renderUnsavedBanner()
 }
 
-// Banner de cambios no guardados en géneros
+// Banner de cambios no guardados en géneros y detalles
 function renderUnsavedBanner() {
   const existing = document.getElementById('unsavedBanner')
-  const hasChanges = !setsEqual(currentGeneroIds, originalGeneroIds)
+  
+  const anoInput = document.getElementById('animeAno')
+  const studioInput = document.getElementById('animeStudio')
+  
+  const currentAno = anoInput && anoInput.value ? parseInt(anoInput.value) : null
+  const currentStudio = studioInput ? (studioInput.value.trim() || null) : null
+  
+  const hasChanges = !setsEqual(currentGeneroIds, originalGeneroIds) ||
+                     originalAnimeAno !== currentAno ||
+                     originalAnimeStudio !== currentStudio
 
   if (!hasChanges) {
     if (existing) existing.remove()
@@ -570,11 +594,11 @@ function renderUnsavedBanner() {
     'border-radius:9px',
     'font-size:13px',
     'color:#fcd34d',
-    'margin-top:4px'
+    'margin-bottom:24px'
   ].join(';')
   banner.innerHTML = `
-    <span>⚠️ <strong>Cambios no guardados</strong> en géneros</span>
-    <button onclick="revertirGeneros()" style="
+    <span>⚠️ <strong>Cambios no guardados</strong> en detalles o géneros</span>
+    <button onclick="revertirDetalles()" style="
       margin-left:auto;
       padding:5px 14px;
       background:rgba(245,158,11,.15);
@@ -587,17 +611,22 @@ function renderUnsavedBanner() {
       cursor:pointer;
     ">↩ Revertir cambios</button>
   `
-  // Insertar después del genresWrap
-  const wrap = document.getElementById('genresWrap')
-  if (wrap) wrap.parentElement.insertBefore(banner, wrap.nextSibling)
+  // Insertar después de animeDetailsRow
+  const row = document.getElementById('animeDetailsRow')
+  if (row) row.parentElement.insertBefore(banner, row.nextSibling)
 }
 
-function revertirGeneros() {
+function revertirDetalles() {
   currentGeneroIds = new Set(originalGeneroIds)
+  const anoInput = document.getElementById('animeAno')
+  if (anoInput) anoInput.value = originalAnimeAno || ''
+  const studioInput = document.getElementById('animeStudio')
+  if (studioInput) studioInput.value = originalAnimeStudio || ''
+  
   markDirty()
   document.getElementById('unsavedBanner')?.remove()
   refreshGenreUI()
-  showToast('Géneros revertidos al estado original', 'info')
+  showToast('Cambios revertidos al estado original', 'info')
 }
 
 function setsEqual(a, b) {
@@ -747,8 +776,10 @@ async function saveExperto(silent = false) {
       block.classList.toggle('ep-partial', estadoExperto !== 'completado' && !!(mp4Url || preg))
     }
 
-    // Actualizar estado para la UI de géneros
+    // Actualizar estado para la UI de géneros y detalles
     originalGeneroIds = new Set(currentGeneroIds)
+    originalAnimeAno = currentAnime['año']
+    originalAnimeStudio = currentAnime.studio
     document.getElementById('unsavedBanner')?.remove()
 
     dirty = false
