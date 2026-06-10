@@ -449,7 +449,7 @@ function renderExperto() {
         <div class="form-group" style="flex:1; margin-bottom:0;">
           <label>🏢 Estudio</label>
           <div class="genres-wrap" id="studioWrap" style="margin-bottom:6px;">${buildStudioChip()}</div>
-          <div class="genre-add-row" id="studioAddRow" style="${currentAnime.studio ? 'display:none;' : 'display:flex;'}">
+          <div class="genre-add-row" id="studioAddRow" style="display:flex;">
             <select class="genre-select" id="studioSelect">
               <option value="">+ Seleccionar estudio...</option>
               ${allStudios.map(s => `<option value="${escapeAttr(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}
@@ -607,7 +607,7 @@ function refreshStudioUI() {
   document.getElementById('studioWrap').innerHTML = buildStudioChip()
   const addRow = document.getElementById('studioAddRow')
   if (addRow) {
-    addRow.style.display = currentEstudioIds.size > 0 ? 'none' : 'flex'
+    addRow.style.display = 'flex'
   }
   const sel = document.getElementById('studioSelect')
   if (sel) {
