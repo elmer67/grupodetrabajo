@@ -49,10 +49,11 @@ let currentAnime      = null
 let currentEpisodios  = []
 let currentGeneroIds  = new Set()   // ids de géneros del anime activo (estado actual)
 let originalGeneroIds = new Set()   // ids originales antes de editar (para revertir)
+let currentEstudioIds = new Set()   // ids de estudios del anime activo
+let originalEstudioIds= new Set()   // ids de estudios originales
 let allGeneros        = []          // todos los géneros disponibles
 let allStudios        = []          // todos los estudios disponibles
 let originalAnimeAno  = null        // año original antes de editar
-let originalAnimeStudio = null      // estudio original antes de editar
 let allServidores     = []          // todos los servidores de BD
 let mp4Server        = null        // { id_servidor, nombre: 'MP4Upload' }
 let embedServers      = []          // todos los servidores (incluyendo mp4 para embed)
@@ -328,6 +329,8 @@ function clearSearch() {
   linksCache = {}
   currentGeneroIds  = new Set()
   originalGeneroIds = new Set()
+  currentEstudioIds = new Set()
+  originalEstudioIds= new Set()
   dirty = false
   document.getElementById('unsavedBanner')?.remove()
 }
@@ -358,8 +361,13 @@ async function selectAnime(id) {
     currentGeneroIds  = new Set((ag || []).map(x => x.id_genero))
     originalGeneroIds = new Set(currentGeneroIds)  // snapshot para revertir
     
+    // 3.5 Estudios del anime
+    const { data: ae } = await db
+      .from('anime_estudios').select('id_estudio').eq('id_anime', id)
+    currentEstudioIds = new Set((ae || []).map(x => x.id_estudio))
+    originalEstudioIds = new Set(currentEstudioIds)
+
     originalAnimeAno = anime['año']
-    originalAnimeStudio = anime.studio
 
     // 4. Links de video de todos los episodios
     linksCache = {}
@@ -489,11 +497,15 @@ function buildGenreChips() {
 }
 
 function buildStudioChip() {
-  if (!currentAnime.studio) return '<span class="no-genres">Sin estudio asignado</span>'
-  return `<span class="genre-chip">
-    ${escapeHtml(currentAnime.studio)}
-    <span class="chip-x" onclick="removeStudio()" title="Quitar">✕</span>
-  </span>`
+  if (currentEstudioIds.size === 0) return '<span class="no-genres">Sin estudio asignado</span>'
+  return [...currentEstudioIds].map(eid => {
+    const st = allStudios.find(x => x.id_estudio === eid)
+    if (!st) return ''
+    return `<span class="genre-chip">
+      ${escapeHtml(st.nombre)}
+      <span class="chip-x" onclick="removeStudio(${eid})" title="Quitar">✕</span>
+    </span>`
+  }).join('')
 }
 
 function buildEpBlockExperto(ep, forceNum = null) {
@@ -578,15 +590,15 @@ function refreshGenreUI() {
 
 function addStudio() {
   const sel = document.getElementById('studioSelect')
-  const val = sel.value
+  const val = parseInt(sel.value)
   if (!val) return
-  currentAnime.studio = val
+  currentEstudioIds.add(val)
   markDirty()
   refreshStudioUI()
 }
 
-function removeStudio() {
-  currentAnime.studio = null
+function removeStudio(id) {
+  currentEstudioIds.delete(id)
   markDirty()
   refreshStudioUI()
 }
@@ -595,12 +607,13 @@ function refreshStudioUI() {
   document.getElementById('studioWrap').innerHTML = buildStudioChip()
   const addRow = document.getElementById('studioAddRow')
   if (addRow) {
-    addRow.style.display = currentAnime.studio ? 'none' : 'flex'
+    addRow.style.display = currentEstudioIds.size > 0 ? 'none' : 'flex'
   }
   const sel = document.getElementById('studioSelect')
   if (sel) {
     sel.innerHTML = `<option value="">+ Seleccionar estudio...</option>` +
-      allStudios.map(s => `<option value="${escapeAttr(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')
+      allStudios.filter(s => !currentEstudioIds.has(s.id_estudio))
+        .map(s => `<option value="${s.id_estudio}">${escapeHtml(s.nombre)}</option>`).join('')
     sel.value = ''
   }
   renderUnsavedBanner()
@@ -627,7 +640,7 @@ async function createNewStudio() {
     allStudios.push(newStudio)
     allStudios.sort((a,b) => a.nombre.localeCompare(b.nombre))
     
-    currentAnime.studio = newStudio.nombre
+    currentEstudioIds.add(newStudio.id_estudio)
     markDirty()
     refreshStudioUI()
     showToast(`Estudio "${newStudio.nombre}" creado y asignado. ¡Recuerda Guardar Cambios!`, 'success')
@@ -641,11 +654,9 @@ function renderUnsavedBanner() {
   const anoInput = document.getElementById('animeAno')
   
   const currentAno = anoInput && anoInput.value ? parseInt(anoInput.value) : null
-  const currentStudio = currentAnime.studio
-  
   const hasChanges = !setsEqual(currentGeneroIds, originalGeneroIds) ||
-                     originalAnimeAno !== currentAno ||
-                     originalAnimeStudio !== currentStudio
+                     !setsEqual(currentEstudioIds, originalEstudioIds) ||
+                     originalAnimeAno !== currentAno
 
   if (!hasChanges) {
     if (existing) existing.remove()
@@ -687,10 +698,9 @@ function renderUnsavedBanner() {
 
 function revertirDetalles() {
   currentGeneroIds = new Set(originalGeneroIds)
+  currentEstudioIds = new Set(originalEstudioIds)
   const anoInput = document.getElementById('animeAno')
   if (anoInput) anoInput.value = originalAnimeAno || ''
-  
-  currentAnime.studio = originalAnimeStudio
   
   markDirty()
   document.getElementById('unsavedBanner')?.remove()
@@ -755,13 +765,23 @@ async function saveExperto(silent = false) {
       if (error) throw error
     }
 
-    // ── 1.5. Año y Estudio ───────────────────────────
+    // ── 1.2. Estudios ────────────────────────────────
+    await db.from('anime_estudios').delete().eq('id_anime', currentAnime.id_anime)
+    if (currentEstudioIds.size > 0) {
+      const rows = [...currentEstudioIds].map(eid => ({
+        id_anime:  currentAnime.id_anime,
+        id_estudio: eid
+      }))
+      const { error } = await db.from('anime_estudios').insert(rows)
+      if (error) throw error
+    }
+
+    // ── 1.5. Año ─────────────────────────────────────
     const newAnoInput = document.getElementById('animeAno')?.value
     const newAno = newAnoInput ? parseInt(newAnoInput) : null
-    const newStudio = currentAnime.studio
     
-    if (currentAnime['año'] !== newAno || originalAnimeStudio !== newStudio) {
-      const { error: updErr } = await db.from('animes').update({ 'año': newAno, studio: newStudio }).eq('id_anime', currentAnime.id_anime)
+    if (currentAnime['año'] !== newAno) {
+      const { error: updErr } = await db.from('animes').update({ 'año': newAno }).eq('id_anime', currentAnime.id_anime)
       if (updErr) throw updErr
       currentAnime['año'] = newAno
     }
@@ -847,8 +867,8 @@ async function saveExperto(silent = false) {
 
     // Actualizar estado para la UI de géneros y detalles
     originalGeneroIds = new Set(currentGeneroIds)
+    originalEstudioIds = new Set(currentEstudioIds)
     originalAnimeAno = currentAnime['año']
-    originalAnimeStudio = currentAnime.studio
     document.getElementById('unsavedBanner')?.remove()
 
     dirty = false
