@@ -1,0 +1,920 @@
+/* ═══════════════════════════════════════════════════════
+   HentaiLA Admin — app.js
+   Vanilla JS + Supabase JS v2 (CDN)
+   ═══════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────
+//  CONFIG — credenciales Supabase
+// ─────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://xhetpfovwcqpnwfvwtxu.supabase.co'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoZXRwZm92d2NxcG53ZnZ3dHh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NTE2NzMsImV4cCI6MjA5MzIyNzY3M30.l8lrUIZJVi1hFKERheNP-TiRw5rmkQ6pheD-tylTJv0'
+
+const { createClient } = supabase
+const db = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+// ─────────────────────────────────────────────────────
+//  ESTADO GLOBAL
+// ─────────────────────────────────────────────────────
+let currentProfile  = 'experto'
+let currentAnime    = null
+let currentEpisodios = []
+let currentGeneroIds = new Set()   // ids de géneros del anime activo
+let allGeneros       = []          // todos los géneros disponibles
+let allServidores    = []          // todos los servidores de BD
+let megaServer       = null        // { id_servidor, nombre: 'Mega' }
+let embedServers     = []          // servidores sin Mega
+// links cargados: { [id_episodio]: { mega: {id_link,url_video} | null, embed: { [id_servidor]: {id_link,url_video} } } }
+let linksCache       = {}
+let dirty            = false
+let searchTimer      = null
+
+// ─────────────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    // Cargar servidores
+    const { data: servs, error: sErr } = await db
+      .from('servidores').select('*').order('id_servidor')
+    if (sErr) throw sErr
+    allServidores = servs || []
+    megaServer    = allServidores.find(s => s.nombre === 'Mega') || null
+    embedServers  = allServidores.filter(s => s.nombre !== 'Mega')
+
+    // Cargar géneros
+    const { data: gens, error: gErr } = await db
+      .from('generos').select('*').order('nombre')
+    if (gErr) throw gErr
+    allGeneros = gens || []
+
+    await loadStats()
+    setupSearch()
+    updatePill()
+
+    // Auto-save cada 30 segundos
+    setInterval(autoSave, 30_000)
+
+    // Aviso antes de cerrar si hay cambios pendientes
+    window.addEventListener('beforeunload', e => {
+      if (dirty) { e.preventDefault(); e.returnValue = '' }
+    })
+
+  } catch (err) {
+    showToast('Error al iniciar: ' + err.message, 'error')
+    console.error(err)
+  }
+})
+
+// ─────────────────────────────────────────────────────
+//  PERFIL
+// ─────────────────────────────────────────────────────
+function switchProfile(p) {
+  currentProfile = p
+  updatePill()
+
+  const label = document.getElementById('searchProfileLabel')
+  label.textContent = p === 'experto' ? '🧠 Perfil Experto' : '📡 Perfil Redes'
+
+  const wq = document.getElementById('workQueue')
+  wq.style.display = p === 'redes' ? 'block' : 'none'
+  if (p === 'redes') loadColaRedes()
+
+  // Re-render con datos ya cargados si hay un anime activo
+  if (currentAnime) {
+    if (p === 'experto') renderExperto()
+    else renderRedes()
+  }
+
+  clearSearch()
+}
+
+function updatePill() {
+  document.querySelectorAll('.toggle-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.p === currentProfile)
+  )
+  const pill      = document.getElementById('togglePill')
+  const activeBtn = document.querySelector(`.toggle-btn[data-p="${currentProfile}"]`)
+  if (pill && activeBtn) {
+    pill.style.left  = activeBtn.offsetLeft + 'px'
+    pill.style.width = activeBtn.offsetWidth + 'px'
+  }
+}
+
+// Actualizar pill después de que el DOM esté listo y los fonts cargados
+window.addEventListener('load', updatePill)
+
+// ─────────────────────────────────────────────────────
+//  BUSCADOR
+// ─────────────────────────────────────────────────────
+function setupSearch() {
+  const input = document.getElementById('searchInput')
+  const clear = document.getElementById('searchClear')
+
+  input.addEventListener('input', e => {
+    const q = e.target.value.trim()
+    clear.style.display = q ? 'flex' : 'none'
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => runSearch(q), 300)
+  })
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') clearSearch()
+  })
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.search-section')) closeDropdown()
+  })
+}
+
+async function runSearch(q) {
+  const dd = document.getElementById('searchDropdown')
+  if (!q || q.length < 2) { closeDropdown(); return }
+
+  dd.innerHTML = '<div class="loading"><div class="spinner"></div> Buscando...</div>'
+  dd.classList.add('open')
+
+  const { data, error } = await db
+    .from('animes')
+    .select('id_anime, titulo, url_portada')
+    .ilike('titulo', `%${q}%`)
+    .order('titulo')
+    .limit(12)
+
+  if (error) { dd.innerHTML = '<div class="dd-empty">Error al buscar</div>'; return }
+
+  if (!data || data.length === 0) {
+    const safeQ = escapeHtml(q)
+    dd.innerHTML = `
+      <div class="dd-empty">No se encontró "${safeQ}"</div>
+      <button class="dd-create" onclick="openNewAnimeModal('${safeQ}')">➕ Crear nuevo anime: "${safeQ}"</button>
+    `
+    return
+  }
+
+  dd.innerHTML = data.map(a => `
+    <div class="dd-item" onclick="selectAnime(${a.id_anime})">
+      ${a.url_portada
+        ? `<img class="dd-thumb" src="${a.url_portada}" alt="" onerror="this.style.display='none'">`
+        : `<div class="dd-placeholder">🎌</div>`}
+      <div class="dd-info">
+        <div class="dd-title">${highlightMatch(escapeHtml(a.titulo), q)}</div>
+        <div class="dd-sub">ID: ${a.id_anime}</div>
+      </div>
+    </div>
+  `).join('')
+}
+
+function highlightMatch(html, q) {
+  const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return html.replace(new RegExp(`(${esc})`, 'gi'), '<mark>$1</mark>')
+}
+
+function closeDropdown() {
+  document.getElementById('searchDropdown').classList.remove('open')
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = ''
+  document.getElementById('searchClear').style.display = 'none'
+  closeDropdown()
+  document.getElementById('formSection').style.display = 'none'
+  currentAnime = null
+  currentEpisodios = []
+  linksCache = {}
+  currentGeneroIds = new Set()
+  dirty = false
+}
+
+// ─────────────────────────────────────────────────────
+//  SELECCIONAR ANIME (carga todo)
+// ─────────────────────────────────────────────────────
+async function selectAnime(id) {
+  closeDropdown()
+  const input = document.getElementById('searchInput')
+  input.value = 'Cargando...'
+  input.disabled = true
+
+  try {
+    // 1. Anime
+    const { data: anime, error: aErr } = await db
+      .from('animes').select('*').eq('id_anime', id).single()
+    if (aErr) throw aErr
+
+    // 2. Episodios
+    const { data: eps, error: eErr } = await db
+      .from('episodios').select('*').eq('id_anime', id).order('numero')
+    if (eErr) throw eErr
+
+    // 3. Géneros del anime
+    const { data: ag } = await db
+      .from('anime_generos').select('id_genero').eq('id_anime', id)
+    currentGeneroIds = new Set((ag || []).map(x => x.id_genero))
+
+    // 4. Links de video de todos los episodios
+    linksCache = {}
+    if (eps && eps.length > 0) {
+      const epIds = eps.map(e => e.id_episodio)
+      const { data: lv } = await db
+        .from('links_videos').select('*').in('id_episodio', epIds)
+
+      ;(lv || []).forEach(l => {
+        if (!linksCache[l.id_episodio]) linksCache[l.id_episodio] = { mega: null, embed: {} }
+        if (l.es_descarga) {
+          linksCache[l.id_episodio].mega = l
+        } else {
+          linksCache[l.id_episodio].embed[l.id_servidor] = l
+        }
+      })
+    }
+
+    currentAnime = anime
+    currentEpisodios = eps || []
+    input.value = anime.titulo
+
+    // Render según perfil
+    if (currentProfile === 'experto') renderExperto()
+    else renderRedes()
+
+    document.getElementById('formSection').style.display = 'block'
+    dirty = false
+
+  } catch (err) {
+    showToast('Error al cargar: ' + err.message, 'error')
+    input.value = ''
+    console.error(err)
+  } finally {
+    input.disabled = false
+  }
+}
+
+// ─────────────────────────────────────────────────────
+//  RENDER — PERFIL EXPERTO
+// ─────────────────────────────────────────────────────
+function renderExperto() {
+  const section = document.getElementById('formSection')
+  const epCount = currentEpisodios.length
+
+  section.innerHTML = `
+    <div class="form-header">
+      ${currentAnime.url_portada
+        ? `<img class="anime-poster" src="${currentAnime.url_portada}" alt="">`
+        : `<div class="anime-poster-ph">🎌</div>`}
+      <div>
+        <div class="anime-titulo">${escapeHtml(currentAnime.titulo)}</div>
+        <div class="anime-meta">🧠 Experto · ${epCount} capítulo${epCount !== 1 ? 's' : ''} · ID ${currentAnime.id_anime}</div>
+      </div>
+    </div>
+
+    <div class="form-body">
+      <!-- GÉNEROS -->
+      <div class="form-group">
+        <label>🏷️ Géneros</label>
+        <div class="genres-wrap" id="genresWrap">${buildGenreChips()}</div>
+        <div class="genre-add-row">
+          <select class="genre-select" id="genreSelect">
+            <option value="">+ Agregar género...</option>
+            ${allGeneros.filter(g => !currentGeneroIds.has(g.id_genero))
+              .map(g => `<option value="${g.id_genero}">${escapeHtml(g.nombre)}</option>`).join('')}
+          </select>
+          <button class="btn-secondary" onclick="addGenre()" style="padding:10px 16px;font-size:13px">Agregar</button>
+        </div>
+      </div>
+
+      <!-- CAPÍTULOS -->
+      <div class="form-group">
+        <label>📚 Capítulos</label>
+        <div class="episodes-list" id="episodesList">
+          ${epCount === 0
+            ? buildEpBlockExperto(null, 1)
+            : currentEpisodios.map(ep => buildEpBlockExperto(ep)).join('')}
+        </div>
+        <button class="add-ep-btn" onclick="addEpisodeExperto()">➕ Añadir Capítulo</button>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="clearSearch()">Cancelar</button>
+      <button class="btn-primary" onclick="saveExperto()">💾 Guardar Cambios</button>
+    </div>
+  `
+
+  // Abrir primer bloque automáticamente
+  const first = section.querySelector('.ep-block')
+  if (first) toggleEpisode(first)
+}
+
+function buildGenreChips() {
+  if (currentGeneroIds.size === 0)
+    return '<span class="no-genres">Sin géneros asignados</span>'
+  return [...currentGeneroIds].map(gid => {
+    const g = allGeneros.find(x => x.id_genero === gid)
+    if (!g) return ''
+    return `<span class="genre-chip">
+      ${escapeHtml(g.nombre)}
+      <span class="chip-x" onclick="removeGenre(${g.id_genero})" title="Quitar">✕</span>
+    </span>`
+  }).join('')
+}
+
+function buildEpBlockExperto(ep, forceNum = null) {
+  const num   = ep ? ep.numero : forceNum
+  const epId  = ep ? ep.id_episodio : `new_${Date.now()}_${Math.random().toString(36).slice(2,6)}`
+  const preg  = ep ? (ep.pregunta_akinator || '') : ''
+  const cache = ep ? linksCache[ep.id_episodio] : null
+  const mega  = cache?.mega?.url_video || ''
+  const done  = ep && ep.estado_experto === 'completado'
+  const partial = !done && (mega || preg)
+  const canDel = num !== 1 || (currentEpisodios.length > 0)
+
+  return `
+    <div class="ep-block ${done ? 'ep-done' : partial ? 'ep-partial' : ''}"
+         data-ep-id="${epId}" data-num="${num}">
+      <div class="ep-header" onclick="toggleEpisode(this.parentElement)">
+        <span class="ep-num">Cap. ${num}</span>
+        <span class="ep-label">${ep?.titulo_episodio ? escapeHtml(ep.titulo_episodio) : `Capítulo ${num}`}</span>
+        <span class="ep-status">${done ? '✅' : partial ? '🔶' : '⚪'}</span>
+        ${canDel ? `<button class="ep-del" onclick="deleteEpisode(event, this.closest('.ep-block'))" title="Eliminar capítulo">🗑️</button>` : ''}
+        <span class="ep-chevron">▼</span>
+      </div>
+      <div class="ep-body experto-grid">
+        <div class="form-group">
+          <label>🔗 Link Mega</label>
+          <input type="url" class="input mega-in"
+            value="${escapeAttr(mega)}"
+            placeholder="https://mega.nz/..."
+            data-ep-id="${epId}"
+            oninput="markDirty(); validateUrlInput(this)" />
+        </div>
+        <div class="form-group">
+          <label>❓ Pregunta Akinator</label>
+          <input type="text" class="input preg-in"
+            value="${escapeAttr(preg)}"
+            placeholder="Escribe una pregunta única sobre este capítulo..."
+            data-ep-id="${epId}"
+            oninput="markDirty()" />
+        </div>
+      </div>
+    </div>`
+}
+
+function toggleEpisode(block) {
+  block.classList.toggle('ep-open')
+}
+
+function addGenre() {
+  const sel = document.getElementById('genreSelect')
+  const id  = parseInt(sel.value)
+  if (!id) return
+  currentGeneroIds.add(id)
+  markDirty()
+  refreshGenreUI()
+}
+
+function removeGenre(id) {
+  currentGeneroIds.delete(id)
+  markDirty()
+  refreshGenreUI()
+}
+
+function refreshGenreUI() {
+  document.getElementById('genresWrap').innerHTML = buildGenreChips()
+  const sel = document.getElementById('genreSelect')
+  if (!sel) return
+  sel.innerHTML = `<option value="">+ Agregar género...</option>` +
+    allGeneros.filter(g => !currentGeneroIds.has(g.id_genero))
+      .map(g => `<option value="${g.id_genero}">${escapeHtml(g.nombre)}</option>`).join('')
+  sel.value = ''
+}
+
+function addEpisodeExperto() {
+  const list   = document.getElementById('episodesList')
+  const blocks = [...list.querySelectorAll('.ep-block')]
+  const nums   = blocks.map(b => parseInt(b.dataset.num)).filter(n => !isNaN(n))
+  const next   = nums.length > 0 ? Math.max(...nums) + 1 : 1
+  const div    = document.createElement('div')
+  div.innerHTML = buildEpBlockExperto(null, next)
+  list.appendChild(div.firstElementChild)
+  const newBlock = list.lastElementChild
+  toggleEpisode(newBlock)
+  newBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  markDirty()
+}
+
+async function deleteEpisode(event, block) {
+  event.stopPropagation()
+  const epId = block.dataset.epId
+  const num  = block.dataset.num
+  if (!confirm(`¿Eliminar Capítulo ${num}? Esta acción es irreversible.`)) return
+
+  if (!String(epId).startsWith('new_')) {
+    const { error } = await db.from('episodios').delete().eq('id_episodio', epId)
+    if (error) { showToast('Error al eliminar: ' + error.message, 'error'); return }
+    currentEpisodios = currentEpisodios.filter(e => e.id_episodio != epId)
+    delete linksCache[epId]
+  }
+  block.remove()
+  showToast(`Capítulo ${num} eliminado`, 'info')
+}
+
+// ─────────────────────────────────────────────────────
+//  GUARDAR — EXPERTO
+// ─────────────────────────────────────────────────────
+async function saveExperto(silent = false) {
+  if (!currentAnime) return
+  const btn = document.querySelector('.btn-primary[onclick="saveExperto()"]')
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...' }
+
+  try {
+    // ── 1. Géneros ──────────────────────────────────
+    await db.from('anime_generos').delete().eq('id_anime', currentAnime.id_anime)
+    if (currentGeneroIds.size > 0) {
+      const rows = [...currentGeneroIds].map(gid => ({
+        id_anime:  currentAnime.id_anime,
+        id_genero: gid
+      }))
+      const { error } = await db.from('anime_generos').insert(rows)
+      if (error) throw error
+    }
+
+    // ── 2. Episodios ─────────────────────────────────
+    const blocks = document.querySelectorAll('#episodesList .ep-block')
+    for (const block of blocks) {
+      const rawId   = block.dataset.epId
+      const num     = parseInt(block.dataset.num)
+      const megaIn  = block.querySelector('.mega-in')
+      const pregIn  = block.querySelector('.preg-in')
+      const megaUrl = megaIn?.value.trim() || ''
+      const preg    = pregIn?.value.trim() || ''
+
+      // Validar URL si se ingresó
+      if (megaUrl && !validateUrl(megaUrl)) {
+        showToast(`URL de Mega inválida en Cap. ${num}`, 'error')
+        continue
+      }
+
+      const estadoExperto = (megaUrl && preg) ? 'completado' : 'pendiente'
+      let episodioId
+
+      if (String(rawId).startsWith('new_')) {
+        // Verificar que no exista ya ese número
+        const { data: exists } = await db.from('episodios')
+          .select('id_episodio').eq('id_anime', currentAnime.id_anime).eq('numero', num).maybeSingle()
+        if (exists) {
+          episodioId = exists.id_episodio
+          await db.from('episodios').update({ pregunta_akinator: preg || null, estado_experto: estadoExperto })
+            .eq('id_episodio', episodioId)
+        } else {
+          const { data: newEp, error: nErr } = await db.from('episodios').insert({
+            id_anime: currentAnime.id_anime,
+            numero: num,
+            pregunta_akinator: preg || null,
+            estado_experto: estadoExperto,
+            estado_links: 'pendiente'
+          }).select('id_episodio').single()
+          if (nErr) throw nErr
+          episodioId = newEp.id_episodio
+          block.dataset.epId = episodioId
+        }
+      } else {
+        episodioId = parseInt(rawId)
+        const { error: uErr } = await db.from('episodios').update({
+          pregunta_akinator: preg || null,
+          estado_experto:    estadoExperto
+        }).eq('id_episodio', episodioId)
+        if (uErr) throw uErr
+      }
+
+      // ── Link Mega ──
+      if (megaServer && megaUrl) {
+        if (!linksCache[episodioId]) linksCache[episodioId] = { mega: null, embed: {} }
+        const existMega = linksCache[episodioId].mega
+
+        if (existMega) {
+          await db.from('links_videos').update({ url_video: megaUrl }).eq('id_link', existMega.id_link)
+          linksCache[episodioId].mega.url_video = megaUrl
+        } else {
+          const { data: nl, error: nlErr } = await db.from('links_videos').insert({
+            id_episodio: episodioId,
+            id_servidor: megaServer.id_servidor,
+            url_video:   megaUrl,
+            es_descarga: true,
+            idioma:      'sub'
+          }).select().single()
+          if (nlErr) throw nlErr
+          linksCache[episodioId].mega = nl
+        }
+      }
+
+      // Actualizar indicador visual
+      const statusEl = block.querySelector('.ep-status')
+      if (statusEl) statusEl.textContent = estadoExperto === 'completado' ? '✅' : (megaUrl || preg ? '🔶' : '⚪')
+      block.classList.toggle('ep-done', estadoExperto === 'completado')
+      block.classList.toggle('ep-partial', estadoExperto !== 'completado' && !!(megaUrl || preg))
+    }
+
+    dirty = false
+    if (!silent) {
+      showToast('¡Guardado correctamente! ✅', 'success')
+      await loadStats()
+    }
+  } catch (err) {
+    showToast('Error al guardar: ' + err.message, 'error')
+    console.error(err)
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar Cambios' }
+  }
+}
+
+// ─────────────────────────────────────────────────────
+//  RENDER — PERFIL REDES
+// ─────────────────────────────────────────────────────
+function renderRedes() {
+  const section  = document.getElementById('formSection')
+  const epCount  = currentEpisodios.length
+
+  section.innerHTML = `
+    <div class="form-header">
+      ${currentAnime.url_portada
+        ? `<img class="anime-poster" src="${currentAnime.url_portada}" alt="">`
+        : `<div class="anime-poster-ph">🎌</div>`}
+      <div>
+        <div class="anime-titulo">${escapeHtml(currentAnime.titulo)}</div>
+        <div class="anime-meta">📡 Redes · ${epCount} capítulo${epCount !== 1 ? 's' : ''} · ID ${currentAnime.id_anime}</div>
+      </div>
+    </div>
+
+    <div class="form-body">
+      <div class="form-group">
+        <label>📚 Capítulos</label>
+        <div class="episodes-list" id="episodesList">
+          ${epCount === 0
+            ? `<div style="color:var(--text-dim);padding:20px;text-align:center">
+                 El Experto aún no ha registrado capítulos para este anime.
+               </div>`
+            : currentEpisodios.map(ep => buildEpBlockRedes(ep)).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="clearSearch()">Cancelar</button>
+      <button class="btn-primary" onclick="saveRedes()">💾 Guardar Links</button>
+    </div>
+  `
+
+  const first = section.querySelector('.ep-block')
+  if (first) toggleEpisode(first)
+}
+
+function buildEpBlockRedes(ep) {
+  const cache      = linksCache[ep.id_episodio] || { mega: null, embed: {} }
+  const megaUrl    = cache.mega?.url_video || ''
+  const filled     = embedServers.filter(s => cache.embed[s.id_servidor]?.url_video).length
+  const total      = embedServers.length
+  const isComplete = filled === total && total > 0
+  const isPartial  = filled > 0 && !isComplete
+  const done       = ep.estado_experto === 'completado'
+
+  return `
+    <div class="ep-block ${isComplete ? 'ep-done' : isPartial ? 'ep-partial' : ''}"
+         data-ep-id="${ep.id_episodio}" data-num="${ep.numero}">
+      <div class="ep-header" onclick="toggleEpisode(this.parentElement)">
+        <span class="ep-num">Cap. ${ep.numero}</span>
+        <span class="ep-label">${ep.titulo_episodio ? escapeHtml(ep.titulo_episodio) : `Capítulo ${ep.numero}`}</span>
+        <span class="ep-status" id="epStat_${ep.id_episodio}">
+          ${isComplete ? '✅' : isPartial ? '⚠️' : '⚪'}
+          <small>${filled}/${total}</small>
+        </span>
+        ${!done ? '<span style="font-size:10px;color:var(--text-dim);margin-left:4px">Experto pendiente</span>' : ''}
+        <span class="ep-chevron">▼</span>
+      </div>
+      <div class="ep-body">
+        <!-- MEGA LINK (readonly) -->
+        <div class="form-group">
+          <label>🔗 Link Mega (descarga)</label>
+          <div class="mega-display">
+            ${megaUrl
+              ? `<span class="mega-url" title="${escapeAttr(megaUrl)}">${escapeHtml(megaUrl)}</span>
+                 <a class="mega-open" href="${escapeAttr(megaUrl)}" target="_blank" rel="noopener noreferrer">Abrir ↗</a>`
+              : `<span class="mega-no-url">El Experto aún no ha subido el link de Mega</span>`}
+          </div>
+        </div>
+
+        <!-- REPRODUCTORES -->
+        <div class="form-group">
+          <label>🎬 Reproductores (${filled}/${total} listos)</label>
+          <div class="server-grid">
+            ${embedServers.map(s => {
+              const lv  = cache.embed[s.id_servidor]
+              const val = lv?.url_video || ''
+              return `
+                <div class="server-field">
+                  <div class="server-label">
+                    <span class="sdot ${val ? 'filled' : ''}" id="dot_${ep.id_episodio}_${s.id_servidor}"></span>
+                    ${escapeHtml(s.nombre)}
+                  </div>
+                  <input type="url" class="input"
+                    value="${escapeAttr(val)}"
+                    placeholder="https://..."
+                    data-ep-id="${ep.id_episodio}"
+                    data-server-id="${s.id_servidor}"
+                    data-link-id="${lv?.id_link || ''}"
+                    oninput="markDirty(); onServerInput(this)"
+                    onchange="validateUrlInput(this)" />
+                </div>`
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`
+}
+
+function onServerInput(input) {
+  const epId   = input.dataset.epId
+  const servId = input.dataset.serverId
+  const filled = !!input.value.trim()
+
+  // Actualizar dot
+  const dot = document.getElementById(`dot_${epId}_${servId}`)
+  if (dot) dot.classList.toggle('filled', filled)
+
+  // Actualizar estado del bloque
+  const block  = input.closest('.ep-block')
+  if (!block) return
+  const inputs = [...block.querySelectorAll('input[data-server-id]')]
+  const nFilled = inputs.filter(i => i.value.trim()).length
+  const nTotal  = embedServers.length
+  const statEl  = document.getElementById(`epStat_${epId}`)
+
+  if (statEl) {
+    statEl.innerHTML = nFilled === nTotal
+      ? `✅ <small>${nFilled}/${nTotal}</small>`
+      : nFilled > 0
+        ? `⚠️ <small>${nFilled}/${nTotal}</small>`
+        : `⚪ <small>${nFilled}/${nTotal}</small>`
+  }
+  block.classList.toggle('ep-done',    nFilled === nTotal && nTotal > 0)
+  block.classList.toggle('ep-partial', nFilled > 0 && nFilled < nTotal)
+}
+
+// ─────────────────────────────────────────────────────
+//  GUARDAR — REDES
+// ─────────────────────────────────────────────────────
+async function saveRedes(silent = false) {
+  if (!currentAnime) return
+  const btn = document.querySelector('.btn-primary[onclick="saveRedes()"]')
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...' }
+
+  try {
+    const blocks = document.querySelectorAll('#episodesList .ep-block')
+
+    for (const block of blocks) {
+      const epId   = parseInt(block.dataset.epId)
+      const num    = block.dataset.num
+      const inputs = [...block.querySelectorAll('input[data-server-id]')]
+      let allFilled = true
+
+      for (const input of inputs) {
+        const url    = input.value.trim()
+        const servId = parseInt(input.dataset.serverId)
+        const linkId = input.dataset.linkId ? parseInt(input.dataset.linkId) : null
+
+        if (url && !validateUrl(url)) {
+          showToast(`URL inválida en Cap. ${num} — ${allServidores.find(s=>s.id_servidor===servId)?.nombre}`, 'error')
+          if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar Links' }
+          return
+        }
+
+        if (!url) { allFilled = false; continue }
+
+        if (linkId) {
+          const { error } = await db.from('links_videos').update({ url_video: url }).eq('id_link', linkId)
+          if (error) throw error
+        } else {
+          const { data: nl, error } = await db.from('links_videos').insert({
+            id_episodio: epId,
+            id_servidor: servId,
+            url_video:   url,
+            es_descarga: false,
+            idioma:      'sub'
+          }).select().single()
+          if (error) throw error
+          input.dataset.linkId = nl.id_link
+          if (!linksCache[epId])        linksCache[epId] = { mega: linksCache[epId]?.mega || null, embed: {} }
+          if (!linksCache[epId].embed)  linksCache[epId].embed = {}
+          linksCache[epId].embed[servId] = nl
+        }
+      }
+
+      // Actualizar estado_links del episodio
+      const estadoLinks = allFilled ? 'completado' : 'pendiente'
+      await db.from('episodios').update({ estado_links: estadoLinks }).eq('id_episodio', epId)
+    }
+
+    dirty = false
+    if (!silent) {
+      showToast('¡Links guardados! ✅', 'success')
+      await loadStats()
+      await loadColaRedes()
+    }
+  } catch (err) {
+    showToast('Error al guardar: ' + err.message, 'error')
+    console.error(err)
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar Links' }
+  }
+}
+
+// ─────────────────────────────────────────────────────
+//  COLA DE TRABAJO (Redes)
+// ─────────────────────────────────────────────────────
+async function loadColaRedes() {
+  const listEl  = document.getElementById('queueList')
+  const badgeEl = document.getElementById('queueBadge')
+  if (!listEl) return
+
+  listEl.innerHTML = '<div class="loading"><div class="spinner"></div></div>'
+
+  // Episodios que el experto completó pero Redes no
+  const { data, error } = await db
+    .from('episodios')
+    .select('id_episodio, numero, id_anime, animes(id_anime, titulo, url_portada)')
+    .eq('estado_experto', 'completado')
+    .eq('estado_links',   'pendiente')
+    .order('id_anime')
+    .limit(200)
+
+  if (error) {
+    listEl.innerHTML = '<div style="color:var(--error);padding:12px;font-size:13px">Error al cargar cola</div>'
+    return
+  }
+
+  // Agrupar por anime
+  const byAnime = {}
+  ;(data || []).forEach(ep => {
+    const a = ep.animes
+    if (!byAnime[a.id_anime]) byAnime[a.id_anime] = { anime: a, count: 0 }
+    byAnime[a.id_anime].count++
+  })
+
+  const items = Object.values(byAnime)
+  badgeEl.textContent = items.length
+
+  if (items.length === 0) {
+    listEl.innerHTML = '<div class="queue-empty">🎉 ¡Cola vacía! Todo al día.</div>'
+    return
+  }
+
+  listEl.innerHTML = items.map(({ anime, count }) => `
+    <div class="queue-item" onclick="selectAnime(${anime.id_anime})">
+      ${anime.url_portada
+        ? `<img class="queue-thumb" src="${anime.url_portada}" alt="" onerror="this.style.display='none'">`
+        : `<div style="width:30px;text-align:center;font-size:18px">🎌</div>`}
+      <div class="queue-info">
+        <div class="queue-title">${escapeHtml(anime.titulo)}</div>
+        <div class="queue-sub">${count} cap${count > 1 ? 's' : ''}. pendiente${count > 1 ? 's' : ''}</div>
+      </div>
+      <span class="queue-arrow">→</span>
+    </div>
+  `).join('')
+}
+
+// ─────────────────────────────────────────────────────
+//  STATS / DASHBOARD
+// ─────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const [
+      { count: totalAnimes },
+      { count: pendExperto },
+      { count: pendRedes   },
+      { count: epsDone     }
+    ] = await Promise.all([
+      db.from('animes')  .select('*', { count: 'exact', head: true }),
+      db.from('episodios').select('*', { count: 'exact', head: true }).eq('estado_experto', 'pendiente'),
+      db.from('episodios').select('*', { count: 'exact', head: true }).eq('estado_experto', 'completado').eq('estado_links', 'pendiente'),
+      db.from('episodios').select('*', { count: 'exact', head: true }).eq('estado_experto', 'completado').eq('estado_links', 'completado')
+    ])
+
+    const pct = Math.round(((totalAnimes || 0) / 1000) * 100)
+
+    // Dashboard
+    setText('dashTotal',   totalAnimes  || 0)
+    setText('dashDone',    epsDone      || 0)
+    setText('dashPendExp', pendExperto  || 0)
+    setText('dashPendRed', pendRedes    || 0)
+    document.getElementById('progressBar').style.width = pct + '%'
+    setText('progressPct', pct + '%')
+    setText('progressSub', `${(totalAnimes||0).toLocaleString()} / 1,000 animes`)
+
+    // Header
+    setText('hStatDone',    epsDone     || 0)
+    setText('hStatPendExp', pendExperto || 0)
+    setText('hStatPendRed', pendRedes   || 0)
+
+  } catch (err) {
+    console.error('Stats error:', err)
+  }
+}
+
+// ─────────────────────────────────────────────────────
+//  MODAL — NUEVO ANIME
+// ─────────────────────────────────────────────────────
+function openNewAnimeModal(prefill = '') {
+  document.getElementById('newAnimeTitulo').value = prefill
+  document.getElementById('newAnimeSlug').value   = slugify(prefill)
+  document.getElementById('newAnimePortada').value = ''
+  document.getElementById('modalOverlay').style.display = 'flex'
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').style.display = 'none'
+}
+
+function handleModalClick(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModal()
+}
+
+function syncSlug() {
+  const titulo = document.getElementById('newAnimeTitulo').value
+  document.getElementById('newAnimeSlug').value = slugify(titulo)
+}
+
+async function createAnime() {
+  const titulo  = document.getElementById('newAnimeTitulo').value.trim()
+  const slug    = document.getElementById('newAnimeSlug').value.trim()
+  const portada = document.getElementById('newAnimePortada').value.trim()
+
+  if (!titulo) { showToast('El título es obligatorio', 'error'); return }
+  if (!slug)   { showToast('El slug es obligatorio', 'error'); return }
+
+  const { data, error } = await db.from('animes').insert({
+    titulo,
+    slug,
+    url_portada: portada || null
+  }).select('id_anime').single()
+
+  if (error) { showToast('Error: ' + error.message, 'error'); return }
+
+  closeModal()
+  closeDropdown()
+  showToast(`Anime "${titulo}" creado ✅`, 'success')
+  await selectAnime(data.id_anime)
+  await loadStats()
+}
+
+// ─────────────────────────────────────────────────────
+//  AUTO-SAVE
+// ─────────────────────────────────────────────────────
+async function autoSave() {
+  if (!dirty || !currentAnime) return
+  if (currentProfile === 'experto') await saveExperto(true)
+  else await saveRedes(true)
+  showToast('Auto-guardado ✅', 'info')
+}
+
+// ─────────────────────────────────────────────────────
+//  UTILIDADES
+// ─────────────────────────────────────────────────────
+function validateUrl(url) {
+  return /^https?:\/\/.+/.test(url)
+}
+
+function validateUrlInput(input) {
+  const v = input.value.trim()
+  input.classList.remove('valid', 'invalid')
+  if (v) input.classList.add(validateUrl(v) ? 'valid' : 'invalid')
+}
+
+function markDirty() { dirty = true }
+
+function showToast(msg, type = 'success') {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' }
+  const t = document.createElement('div')
+  t.className = `toast ${type}`
+  t.innerHTML = `<span>${icons[type] || '📢'}</span><span>${msg}</span>`
+  document.getElementById('toastContainer').appendChild(t)
+  setTimeout(() => {
+    t.style.animation = 'toastOut .3s forwards'
+    setTimeout(() => t.remove(), 310)
+  }, 3500)
+}
+
+function slugify(text) {
+  return text.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim()
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+function escapeAttr(s) {
+  return String(s ?? '').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id)
+  if (el) el.textContent = val
+}
