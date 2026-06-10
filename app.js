@@ -8,25 +8,37 @@
 // ─────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://xhetpfovwcqpnwfvwtxu.supabase.co'
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoZXRwZm92d2NxcG53ZnZ3dHh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NTE2NzMsImV4cCI6MjA5MzIyNzY3M30.l8lrUIZJVi1hFKERheNP-TiRw5rmkQ6pheD-tylTJv0'
+const CDN_BASE = 'https://cdn.hentaila.pro'
 
 const { createClient } = supabase
 const db = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+// ─── IMAGEN ─────────────────────────────────────────
+// Replica la lógica de lib/imgPath.ts del proyecto hentaila-pro
+function imgPath(dbPath) {
+  if (!dbPath) return ''
+  if (dbPath.startsWith('http')) return dbPath
+  let p = dbPath
+  if (p.startsWith('img/')) p = 'assets/' + p
+  return `${CDN_BASE}/${p}`
+}
+
 // ─────────────────────────────────────────────────────
 //  ESTADO GLOBAL
 // ─────────────────────────────────────────────────────
-let currentProfile  = 'experto'
-let currentAnime    = null
-let currentEpisodios = []
-let currentGeneroIds = new Set()   // ids de géneros del anime activo
-let allGeneros       = []          // todos los géneros disponibles
-let allServidores    = []          // todos los servidores de BD
-let megaServer       = null        // { id_servidor, nombre: 'Mega' }
-let embedServers     = []          // todos los servidores (incluyendo Mega para embed)
+let currentProfile    = 'experto'
+let currentAnime      = null
+let currentEpisodios  = []
+let currentGeneroIds  = new Set()   // ids de géneros del anime activo (estado actual)
+let originalGeneroIds = new Set()   // ids originales antes de editar (para revertir)
+let allGeneros        = []          // todos los géneros disponibles
+let allServidores     = []          // todos los servidores de BD
+let megaServer        = null        // { id_servidor, nombre: 'Mega' }
+let embedServers      = []          // todos los servidores (incluyendo Mega para embed)
 // links cargados: { [id_episodio]: { mega: {id_link,url_video} | null, embed: { [id_servidor]: {id_link,url_video} } } }
-let linksCache       = {}
-let dirty            = false
-let searchTimer      = null
+let linksCache        = {}
+let dirty             = false
+let searchTimer       = null
 
 // ─────────────────────────────────────────────────────
 //  INIT
@@ -182,8 +194,10 @@ function clearSearch() {
   currentAnime = null
   currentEpisodios = []
   linksCache = {}
-  currentGeneroIds = new Set()
+  currentGeneroIds  = new Set()
+  originalGeneroIds = new Set()
   dirty = false
+  document.getElementById('unsavedBanner')?.remove()
 }
 
 // ─────────────────────────────────────────────────────
@@ -209,7 +223,8 @@ async function selectAnime(id) {
     // 3. Géneros del anime
     const { data: ag } = await db
       .from('anime_generos').select('id_genero').eq('id_anime', id)
-    currentGeneroIds = new Set((ag || []).map(x => x.id_genero))
+    currentGeneroIds  = new Set((ag || []).map(x => x.id_genero))
+    originalGeneroIds = new Set(currentGeneroIds)  // snapshot para revertir
 
     // 4. Links de video de todos los episodios
     linksCache = {}
@@ -254,11 +269,12 @@ async function selectAnime(id) {
 function renderExperto() {
   const section = document.getElementById('formSection')
   const epCount = currentEpisodios.length
+  const poster  = imgPath(currentAnime.url_portada)
 
   section.innerHTML = `
     <div class="form-header">
-      ${currentAnime.url_portada
-        ? `<img class="anime-poster" src="${currentAnime.url_portada}" alt="">`
+      ${poster
+        ? `<img class="anime-poster" src="${escapeAttr(poster)}" alt="${escapeAttr(currentAnime.titulo)}" onerror="this.style.display='none'">`
         : `<div class="anime-poster-ph">🎌</div>`}
       <div>
         <div class="anime-titulo">${escapeHtml(currentAnime.titulo)}</div>
@@ -385,6 +401,64 @@ function refreshGenreUI() {
     allGeneros.filter(g => !currentGeneroIds.has(g.id_genero))
       .map(g => `<option value="${g.id_genero}">${escapeHtml(g.nombre)}</option>`).join('')
   sel.value = ''
+  renderUnsavedBanner()
+}
+
+// Banner de cambios no guardados en géneros
+function renderUnsavedBanner() {
+  const existing = document.getElementById('unsavedBanner')
+  const hasChanges = !setsEqual(currentGeneroIds, originalGeneroIds)
+
+  if (!hasChanges) {
+    if (existing) existing.remove()
+    return
+  }
+  if (existing) return  // ya existe, no duplicar
+
+  const banner = document.createElement('div')
+  banner.id = 'unsavedBanner'
+  banner.style.cssText = [
+    'display:flex', 'align-items:center', 'gap:12px',
+    'padding:10px 16px',
+    'background:rgba(245,158,11,.12)',
+    'border:1px solid rgba(245,158,11,.35)',
+    'border-radius:9px',
+    'font-size:13px',
+    'color:#fcd34d',
+    'margin-top:4px'
+  ].join(';')
+  banner.innerHTML = `
+    <span>⚠️ <strong>Cambios no guardados</strong> en géneros</span>
+    <button onclick="revertirGeneros()" style="
+      margin-left:auto;
+      padding:5px 14px;
+      background:rgba(245,158,11,.15);
+      border:1px solid rgba(245,158,11,.4);
+      border-radius:6px;
+      color:#fcd34d;
+      font-family:inherit;
+      font-size:12px;
+      font-weight:700;
+      cursor:pointer;
+    ">↩ Revertir cambios</button>
+  `
+  // Insertar después del genresWrap
+  const wrap = document.getElementById('genresWrap')
+  if (wrap) wrap.parentElement.insertBefore(banner, wrap.nextSibling)
+}
+
+function revertirGeneros() {
+  currentGeneroIds = new Set(originalGeneroIds)
+  markDirty()
+  document.getElementById('unsavedBanner')?.remove()
+  refreshGenreUI()
+  showToast('Géneros revertidos al estado original', 'info')
+}
+
+function setsEqual(a, b) {
+  if (a.size !== b.size) return false
+  for (const v of a) if (!b.has(v)) return false
+  return true
 }
 
 function addEpisodeExperto() {
@@ -532,11 +606,12 @@ async function saveExperto(silent = false) {
 function renderRedes() {
   const section  = document.getElementById('formSection')
   const epCount  = currentEpisodios.length
+  const poster   = imgPath(currentAnime.url_portada)
 
   section.innerHTML = `
     <div class="form-header">
-      ${currentAnime.url_portada
-        ? `<img class="anime-poster" src="${currentAnime.url_portada}" alt="">`
+      ${poster
+        ? `<img class="anime-poster" src="${escapeAttr(poster)}" alt="${escapeAttr(currentAnime.titulo)}" onerror="this.style.display='none'">`
         : `<div class="anime-poster-ph">🎌</div>`}
       <div>
         <div class="anime-titulo">${escapeHtml(currentAnime.titulo)}</div>
@@ -798,7 +873,14 @@ async function loadStats() {
       db.from('episodios').select('*', { count: 'exact', head: true }).eq('estado_experto', 'completado').eq('estado_links', 'completado')
     ])
 
-    const pct = Math.round(((totalAnimes || 0) / 1000) * 100)
+    // Contar animes con al menos un episodio 100% completo (experto + redes)
+    const { data: doneEpData } = await db
+      .from('episodios')
+      .select('id_anime')
+      .eq('estado_experto', 'completado')
+      .eq('estado_links', 'completado')
+    const doneAnimes = new Set((doneEpData || []).map(e => e.id_anime)).size
+    const pct = Math.round((doneAnimes / 1000) * 100)
 
     // Dashboard
     setText('dashTotal',   totalAnimes  || 0)
@@ -807,7 +889,7 @@ async function loadStats() {
     setText('dashPendRed', pendRedes    || 0)
     document.getElementById('progressBar').style.width = pct + '%'
     setText('progressPct', pct + '%')
-    setText('progressSub', `${(totalAnimes||0).toLocaleString()} / 1,000 animes`)
+    setText('progressSub', `${doneAnimes.toLocaleString()} / 1,000 animes completados`)
 
     // Header
     setText('hStatDone',    epsDone     || 0)
