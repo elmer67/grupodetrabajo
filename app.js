@@ -22,7 +22,7 @@ let currentGeneroIds = new Set()   // ids de géneros del anime activo
 let allGeneros       = []          // todos los géneros disponibles
 let allServidores    = []          // todos los servidores de BD
 let megaServer       = null        // { id_servidor, nombre: 'Mega' }
-let embedServers     = []          // servidores sin Mega
+let embedServers     = []          // todos los servidores (incluyendo Mega para embed)
 // links cargados: { [id_episodio]: { mega: {id_link,url_video} | null, embed: { [id_servidor]: {id_link,url_video} } } }
 let linksCache       = {}
 let dirty            = false
@@ -39,7 +39,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (sErr) throw sErr
     allServidores = servs || []
     megaServer    = allServidores.find(s => s.nombre === 'Mega') || null
-    embedServers  = allServidores.filter(s => s.nombre !== 'Mega')
+    // Mega aparece en la grilla de reproductores (embed) Y también tiene link de descarga
+    embedServers  = allServidores  // todos los servidores, incluyendo Mega
 
     // Cargar géneros
     const { data: gens, error: gErr } = await db
@@ -589,33 +590,34 @@ function buildEpBlockRedes(ep) {
         <span class="ep-chevron">▼</span>
       </div>
       <div class="ep-body">
-        <!-- MEGA LINK (readonly) -->
+        <!-- MEGA LINK DE DESCARGA (readonly — lo pone el Experto) -->
         <div class="form-group">
-          <label>🔗 Link Mega (descarga)</label>
+          <label>⬇️ Mega — Link de descarga <span style="color:var(--text-dim);font-weight:400;text-transform:none;font-size:10px">(provisto por el Experto)</span></label>
           <div class="mega-display">
             ${megaUrl
               ? `<span class="mega-url" title="${escapeAttr(megaUrl)}">${escapeHtml(megaUrl)}</span>
-                 <a class="mega-open" href="${escapeAttr(megaUrl)}" target="_blank" rel="noopener noreferrer">Abrir ↗</a>`
-              : `<span class="mega-no-url">El Experto aún no ha subido el link de Mega</span>`}
+                 <a class="mega-open" href="${escapeAttr(megaUrl)}" target="_blank" rel="noopener noreferrer">Descargar ↗</a>`
+              : `<span class="mega-no-url">El Experto aún no ha subido el link de descarga de Mega</span>`}
           </div>
         </div>
 
-        <!-- REPRODUCTORES -->
+        <!-- REPRODUCTORES: todos los servidores (Mega incluido como embed) -->
         <div class="form-group">
           <label>🎬 Reproductores (${filled}/${total} listos)</label>
           <div class="server-grid">
             ${embedServers.map(s => {
-              const lv  = cache.embed[s.id_servidor]
-              const val = lv?.url_video || ''
+              const lv    = cache.embed[s.id_servidor]
+              const val   = lv?.url_video || ''
+              const isMega = megaServer && s.id_servidor === megaServer.id_servidor
               return `
                 <div class="server-field">
                   <div class="server-label">
                     <span class="sdot ${val ? 'filled' : ''}" id="dot_${ep.id_episodio}_${s.id_servidor}"></span>
-                    ${escapeHtml(s.nombre)}
+                    ${escapeHtml(s.nombre)}${isMega ? ' <span style="font-size:9px;color:var(--text-dim);font-weight:400">(embed)</span>' : ''}
                   </div>
                   <input type="url" class="input"
                     value="${escapeAttr(val)}"
-                    placeholder="https://..."
+                    placeholder="${isMega ? 'https://mega.nz/embed/...' : 'https://...'}"
                     data-ep-id="${ep.id_episodio}"
                     data-server-id="${s.id_servidor}"
                     data-link-id="${lv?.id_link || ''}"
