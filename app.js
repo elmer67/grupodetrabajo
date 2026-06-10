@@ -64,9 +64,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     setupSearch()
     updatePill()
 
-    // Auto-save cada 30 segundos
-    setInterval(autoSave, 30_000)
-
     // Aviso antes de cerrar si hay cambios pendientes
     window.addEventListener('beforeunload', e => {
       if (dirty) { e.preventDefault(); e.returnValue = '' }
