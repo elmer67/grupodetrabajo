@@ -723,9 +723,13 @@ async function saveExperto(silent = false) {
       block.classList.toggle('ep-partial', estadoExperto !== 'completado' && !!(mp4Url || preg))
     }
 
+    // Actualizar estado para la UI de géneros
+    originalGeneroIds = new Set(currentGeneroIds)
+    document.getElementById('unsavedBanner')?.remove()
+
     dirty = false
     if (!silent) {
-      showToast('¡Guardado correctamente! ✅', 'success')
+      showToast('¡Guardado correctamente! 💾', 'success')
       await loadStats()
     }
   } catch (err) {
