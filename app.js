@@ -33,7 +33,7 @@ const SESSIONS = {
   'flower123': { profile: 'redes',   group: null, members: null }
 }
 
-const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('')
+const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 const GRUPO_COLORS = {
   'A': { bg: 'rgba(124,58,237,.22)', border: 'rgba(124,58,237,.55)', text: '#a66ef5' },
   'B': { bg: 'rgba(236,72,153,.22)', border: 'rgba(236,72,153,.55)', text: '#f472b6' },
