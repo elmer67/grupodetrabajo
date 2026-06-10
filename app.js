@@ -51,9 +51,9 @@ let currentGeneroIds  = new Set()   // ids de géneros del anime activo (estado 
 let originalGeneroIds = new Set()   // ids originales antes de editar (para revertir)
 let allGeneros        = []          // todos los géneros disponibles
 let allServidores     = []          // todos los servidores de BD
-let megaServer        = null        // { id_servidor, nombre: 'Mega' }
-let embedServers      = []          // todos los servidores (incluyendo Mega para embed)
-// links cargados: { [id_episodio]: { mega: {id_link,url_video} | null, embed: { [id_servidor]: {id_link,url_video} } } }
+let mp4Server        = null        // { id_servidor, nombre: 'MP4Upload' }
+let embedServers      = []          // todos los servidores (incluyendo mp4 para embed)
+// links cargados: { [id_episodio]: { mp4: {id_link,url_video} | null, embed: { [id_servidor]: {id_link,url_video} } } }
 let linksCache        = {}
 let dirty             = false
 let searchTimer       = null
@@ -175,9 +175,9 @@ async function startApp() {
       .from('servidores').select('*').order('id_servidor')
     if (sErr) throw sErr
     allServidores = servs || []
-    megaServer    = allServidores.find(s => s.nombre === 'Mega') || null
-    // Mega aparece en la grilla de reproductores (embed) Y también tiene link de descarga
-    embedServers  = allServidores  // todos los servidores, incluyendo Mega
+    mp4Server    = allServidores.find(s => s.nombre === 'MP4Upload') || null
+    // mp4 aparece en la grilla de reproductores (embed) Y también tiene link de descarga
+    embedServers  = allServidores  // todos los servidores, incluyendo mp4
 
     // Cargar géneros
     const { data: gens, error: gErr } = await db
@@ -358,9 +358,9 @@ async function selectAnime(id) {
         .from('links_videos').select('*').in('id_episodio', epIds)
 
       ;(lv || []).forEach(l => {
-        if (!linksCache[l.id_episodio]) linksCache[l.id_episodio] = { mega: null, embed: {} }
+        if (!linksCache[l.id_episodio]) linksCache[l.id_episodio] = { mp4: null, embed: {} }
         if (l.es_descarga) {
-          linksCache[l.id_episodio].mega = l
+          linksCache[l.id_episodio].mp4 = l
         } else {
           linksCache[l.id_episodio].embed[l.id_servidor] = l
         }
@@ -462,9 +462,9 @@ function buildEpBlockExperto(ep, forceNum = null) {
   const epId  = ep ? ep.id_episodio : `new_${Date.now()}_${Math.random().toString(36).slice(2,6)}`
   const preg  = ep ? (ep.pregunta_akinator || '') : ''
   const cache = ep ? linksCache[ep.id_episodio] : null
-  const mega  = cache?.mega?.url_video || ''
+  const mp4  = cache?.mp4?.url_video || ''
   const done  = ep && ep.estado_experto === 'completado'
-  const partial = !done && (mega || preg)
+  const partial = !done && (mp4 || preg)
   const canDel = num !== 1 || (currentEpisodios.length > 0)
 
   return `
@@ -479,10 +479,10 @@ function buildEpBlockExperto(ep, forceNum = null) {
       </div>
       <div class="ep-body experto-grid">
         <div class="form-group">
-          <label>🔗 Link Mega</label>
-          <input type="url" class="input mega-in"
-            value="${escapeAttr(mega)}"
-            placeholder="https://mega.nz/..."
+          <label>🔗 Link MP4Upload</label>
+          <input type="url" class="input mp4-in"
+            value="${escapeAttr(mp4)}"
+            placeholder="https://www.mp4upload.com/..."
             data-ep-id="${epId}"
             oninput="markDirty(); validateUrlInput(this)" />
         </div>
@@ -640,18 +640,18 @@ async function saveExperto(silent = false) {
     for (const block of blocks) {
       const rawId   = block.dataset.epId
       const num     = parseInt(block.dataset.num)
-      const megaIn  = block.querySelector('.mega-in')
+      const mp4In  = block.querySelector('.mp4-in')
       const pregIn  = block.querySelector('.preg-in')
-      const megaUrl = megaIn?.value.trim() || ''
+      const mp4Url = mp4In?.value.trim() || ''
       const preg    = pregIn?.value.trim() || ''
 
       // Validar URL si se ingresó
-      if (megaUrl && !validateUrl(megaUrl)) {
-        showToast(`URL de Mega inválida en Cap. ${num}`, 'error')
+      if (mp4Url && !validateUrl(mp4Url)) {
+        showToast(`URL de MP4Upload inválida en Cap. ${num}`, 'error')
         continue
       }
 
-      const estadoExperto = (megaUrl && preg) ? 'completado' : 'pendiente'
+      const estadoExperto = (mp4Url && preg) ? 'completado' : 'pendiente'
       let episodioId
 
       if (String(rawId).startsWith('new_')) {
@@ -683,32 +683,32 @@ async function saveExperto(silent = false) {
         if (uErr) throw uErr
       }
 
-      // ── Link Mega ──
-      if (megaServer && megaUrl) {
-        if (!linksCache[episodioId]) linksCache[episodioId] = { mega: null, embed: {} }
-        const existMega = linksCache[episodioId].mega
+      // ── Link MP4Upload ──
+      if (mp4Server && mp4Url) {
+        if (!linksCache[episodioId]) linksCache[episodioId] = { mp4: null, embed: {} }
+        const existMp4 = linksCache[episodioId].mp4
 
-        if (existMega) {
-          await db.from('links_videos').update({ url_video: megaUrl }).eq('id_link', existMega.id_link)
-          linksCache[episodioId].mega.url_video = megaUrl
+        if (existMp4) {
+          await db.from('links_videos').update({ url_video: mp4Url }).eq('id_link', existMp4.id_link)
+          linksCache[episodioId].mp4.url_video = mp4Url
         } else {
           const { data: nl, error: nlErr } = await db.from('links_videos').insert({
             id_episodio: episodioId,
-            id_servidor: megaServer.id_servidor,
-            url_video:   megaUrl,
+            id_servidor: mp4Server.id_servidor,
+            url_video:   mp4Url,
             es_descarga: true,
             idioma:      'sub'
           }).select().single()
           if (nlErr) throw nlErr
-          linksCache[episodioId].mega = nl
+          linksCache[episodioId].mp4 = nl
         }
       }
 
       // Actualizar indicador visual
       const statusEl = block.querySelector('.ep-status')
-      if (statusEl) statusEl.textContent = estadoExperto === 'completado' ? '✅' : (megaUrl || preg ? '🔶' : '⚪')
+      if (statusEl) statusEl.textContent = estadoExperto === 'completado' ? '✅' : (mp4Url || preg ? '🔶' : '⚪')
       block.classList.toggle('ep-done', estadoExperto === 'completado')
-      block.classList.toggle('ep-partial', estadoExperto !== 'completado' && !!(megaUrl || preg))
+      block.classList.toggle('ep-partial', estadoExperto !== 'completado' && !!(mp4Url || preg))
     }
 
     dirty = false
@@ -767,8 +767,8 @@ function renderRedes() {
 }
 
 function buildEpBlockRedes(ep) {
-  const cache      = linksCache[ep.id_episodio] || { mega: null, embed: {} }
-  const megaUrl    = cache.mega?.url_video || ''
+  const cache      = linksCache[ep.id_episodio] || { mp4: null, embed: {} }
+  const mp4Url    = cache.mp4?.url_video || ''
   const filled     = embedServers.filter(s => cache.embed[s.id_servidor]?.url_video).length
   const total      = embedServers.length
   const isComplete = filled === total && total > 0
@@ -789,34 +789,34 @@ function buildEpBlockRedes(ep) {
         <span class="ep-chevron">▼</span>
       </div>
       <div class="ep-body">
-        <!-- MEGA LINK DE DESCARGA (readonly — lo pone el Experto) -->
+        <!-- mp4 LINK DE DESCARGA (readonly — lo pone el Experto) -->
         <div class="form-group">
-          <label>⬇️ Mega — Link de descarga <span style="color:var(--text-dim);font-weight:400;text-transform:none;font-size:10px">(provisto por el Experto)</span></label>
-          <div class="mega-display">
-            ${megaUrl
-              ? `<span class="mega-url" title="${escapeAttr(megaUrl)}">${escapeHtml(megaUrl)}</span>
-                 <a class="mega-open" href="${escapeAttr(megaUrl)}" target="_blank" rel="noopener noreferrer">Descargar ↗</a>`
-              : `<span class="mega-no-url">El Experto aún no ha subido el link de descarga de Mega</span>`}
+          <label>⬇️ mp4 — Link de descarga <span style="color:var(--text-dim);font-weight:400;text-transform:none;font-size:10px">(provisto por el Experto)</span></label>
+          <div class="mp4-display">
+            ${mp4Url
+              ? `<span class="mp4-url" title="${escapeAttr(mp4Url)}">${escapeHtml(mp4Url)}</span>
+                 <a class="mp4-open" href="${escapeAttr(mp4Url)}" target="_blank" rel="noopener noreferrer">Descargar ↗</a>`
+              : `<span class="mp4-no-url">El Experto aún no ha subido el link de descarga de MP4Upload</span>`}
           </div>
         </div>
 
-        <!-- REPRODUCTORES: todos los servidores (Mega incluido como embed) -->
+        <!-- REPRODUCTORES: todos los servidores (MP4Upload incluido como embed) -->
         <div class="form-group">
           <label>🎬 Reproductores (${filled}/${total} listos)</label>
           <div class="server-grid">
             ${embedServers.map(s => {
               const lv    = cache.embed[s.id_servidor]
               const val   = lv?.url_video || ''
-              const isMega = megaServer && s.id_servidor === megaServer.id_servidor
+              const isMp4 = mp4Server && s.id_servidor === mp4Server.id_servidor
               return `
                 <div class="server-field">
                   <div class="server-label">
                     <span class="sdot ${val ? 'filled' : ''}" id="dot_${ep.id_episodio}_${s.id_servidor}"></span>
-                    ${escapeHtml(s.nombre)}${isMega ? ' <span style="font-size:9px;color:var(--text-dim);font-weight:400">(embed)</span>' : ''}
+                    ${escapeHtml(s.nombre)}${isMp4 ? ' <span style="font-size:9px;color:var(--text-dim);font-weight:400">(embed)</span>' : ''}
                   </div>
                   <input type="url" class="input"
                     value="${escapeAttr(val)}"
-                    placeholder="${isMega ? 'https://mega.nz/embed/...' : 'https://...'}"
+                    placeholder="${isMp4 ? 'https://www.mp4upload.com/...ed/...' : 'https://...'}"
                     data-ep-id="${ep.id_episodio}"
                     data-server-id="${s.id_servidor}"
                     data-link-id="${lv?.id_link || ''}"
@@ -901,7 +901,7 @@ async function saveRedes(silent = false) {
           }).select().single()
           if (error) throw error
           input.dataset.linkId = nl.id_link
-          if (!linksCache[epId])        linksCache[epId] = { mega: linksCache[epId]?.mega || null, embed: {} }
+          if (!linksCache[epId])        linksCache[epId] = { mp4: linksCache[epId]?.mp4 || null, embed: {} }
           if (!linksCache[epId].embed)  linksCache[epId].embed = {}
           linksCache[epId].embed[servId] = nl
         }
@@ -1278,3 +1278,5 @@ function setText(id, val) {
   const el = document.getElementById(id)
   if (el) el.textContent = val
 }
+
+

@@ -608,8 +608,8 @@ a { color: inherit; text-decoration: none; }
 }
 .sdot.filled { background: var(--success); }
 
-/* Mega readonly display */
-.mega-display {
+/* MP4Upload readonly display */
+.mp4-display {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -619,7 +619,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius-sm);
   min-height: 42px;
 }
-.mega-url {
+.mp4-url {
   flex: 1;
   font-size: 13px;
   color: var(--success);
@@ -627,8 +627,8 @@ a { color: inherit; text-decoration: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mega-no-url { font-size: 13px; color: var(--text-dim); font-style: italic; }
-.mega-open {
+.mp4-no-url { font-size: 13px; color: var(--text-dim); font-style: italic; }
+.mp4-open {
   padding: 5px 11px;
   background: rgba(16,185,129,.15);
   border: 1px solid rgba(16,185,129,.3);
@@ -642,7 +642,7 @@ a { color: inherit; text-decoration: none; }
   text-decoration: none;
   flex-shrink: 0;
 }
-.mega-open:hover { background: rgba(16,185,129,.28); }
+.mp4-open:hover { background: rgba(16,185,129,.28); }
 
 /* Add episode button */
 .add-ep-btn {
@@ -1223,3 +1223,4 @@ a { color: inherit; text-decoration: none; }
 .letra-cell.lc-done:hover { filter: none; transform: none; }
 .letra-cell.lc-done .letra-char { font-size: 14px; }
 .letra-cell.lc-done .letra-count { color: rgba(16,185,129,.7); }
+
