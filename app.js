@@ -24,8 +24,19 @@ function imgPath(dbPath) {
 }
 
 // ─────────────────────────────────────────────────────
+//  CONTRASEÑAS — config de grupos
+// ─────────────────────────────────────────────────────
+const SESSIONS = {
+  'hideki123': { profile: 'experto', group: 'A', members: ['jf', 'hideki'] },
+  'ortiz123':  { profile: 'experto', group: 'B', members: ['osorio', 'ortiz'] },
+  'kish123':   { profile: 'experto', group: 'C', members: ['kish'] },
+  'flower123': { profile: 'redes',   group: null, members: null }
+}
+
+// ─────────────────────────────────────────────────────
 //  ESTADO GLOBAL
 // ─────────────────────────────────────────────────────
+let currentSession    = null           // { profile, group, members } — sesión activa
 let currentProfile    = 'experto'
 let currentAnime      = null
 let currentEpisodios  = []
@@ -41,9 +52,114 @@ let dirty             = false
 let searchTimer       = null
 
 // ─────────────────────────────────────────────────────
-//  INIT
+//  AUTENTICACIÓN
 // ─────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', async () => {
+window.addEventListener('DOMContentLoaded', () => {
+  // Soporte tecla Enter en login
+  document.getElementById('loginPassword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin()
+  })
+
+  // Verificar sesión guardada
+  const saved = sessionStorage.getItem('hl_session')
+  if (saved) {
+    try {
+      currentSession = JSON.parse(saved)
+      startApp()
+    } catch {
+      sessionStorage.removeItem('hl_session')
+    }
+  }
+  // Si no hay sesión, la pantalla de login ya está visible en el HTML
+})
+
+async function doLogin() {
+  const btn  = document.getElementById('loginBtn')
+  const pwd  = document.getElementById('loginPassword').value
+  const errEl = document.getElementById('loginError')
+  const session = SESSIONS[pwd]
+
+  if (!session) {
+    errEl.style.display = 'flex'
+    document.getElementById('loginPassword').value = ''
+    document.getElementById('loginPassword').focus()
+    setTimeout(() => { errEl.style.display = 'none' }, 3000)
+    return
+  }
+
+  btn.disabled = true
+  btn.textContent = 'Entrando...'
+  currentSession = session
+  sessionStorage.setItem('hl_session', JSON.stringify(session))
+  await startApp()
+}
+
+function doLogout() {
+  if (!confirm('\u00bfCerrar sesión?')) return
+  sessionStorage.removeItem('hl_session')
+  location.reload()
+}
+
+function togglePasswordVisibility() {
+  const input = document.getElementById('loginPassword')
+  input.type = input.type === 'password' ? 'text' : 'password'
+}
+
+function applySession() {
+  // Ocultar login
+  document.getElementById('loginScreen').style.display = 'none'
+
+  // Fijar perfil según sesión
+  currentProfile = currentSession.profile
+
+  // Ocultar toggle (rol fijo por contraseña)
+  const toggle = document.getElementById('profileToggle')
+  if (toggle) toggle.style.display = 'none'
+
+  // Etiqueta de perfil en buscador
+  const lbl = document.getElementById('searchProfileLabel')
+  if (lbl) lbl.textContent = currentProfile === 'experto' ? '🧠 Perfil Experto' : '📡 Perfil Redes'
+
+  // Cola de trabajo solo para Redes
+  const wq = document.getElementById('workQueue')
+  if (wq) wq.style.display = currentProfile === 'redes' ? 'block' : 'none'
+
+  // Indicador de usuario en header
+  const ui = document.getElementById('userIndicator')
+  if (ui) {
+    ui.innerHTML = currentSession.group
+      ? `👥 <strong>Grupo ${currentSession.group}</strong>`
+      : '📡 Redes'
+    ui.style.display = 'flex'
+  }
+
+  // Botón salir visible
+  const lb = document.getElementById('logoutBtn')
+  if (lb) lb.style.display = 'inline-flex'
+
+  // Tarjeta de grupo en dashboard (solo Experto)
+  const gc = document.getElementById('groupCard')
+  if (gc) {
+    if (currentSession.group) {
+      gc.style.display = 'flex'
+      document.getElementById('groupCardName').textContent =
+        `Grupo ${currentSession.group}`
+      document.getElementById('groupCardMembers').textContent =
+        currentSession.members.join(' · ')
+    } else {
+      gc.style.display = 'none'
+    }
+  }
+
+  updatePill()
+}
+
+// ─────────────────────────────────────────────────────
+//  INICIO DE APP (después de autenticarse)
+// ─────────────────────────────────────────────────────
+async function startApp() {
+  applySession()
+
   try {
     // Cargar servidores
     const { data: servs, error: sErr } = await db
@@ -61,8 +177,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     allGeneros = gens || []
 
     await loadStats()
+    if (currentProfile === 'redes') await loadColaRedes()
     setupSearch()
-    updatePill()
 
     // Aviso antes de cerrar si hay cambios pendientes
     window.addEventListener('beforeunload', e => {
@@ -73,7 +189,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     showToast('Error al iniciar: ' + err.message, 'error')
     console.error(err)
   }
-})
+}
 
 // ─────────────────────────────────────────────────────
 //  PERFIL

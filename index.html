@@ -10,7 +10,38 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+
+  <!-- ══════════════ LOGIN SCREEN ══════════════ -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-orb login-orb-1"></div>
+    <div class="login-orb login-orb-2"></div>
+    <div class="login-card">
+      <div class="login-logo-wrap">
+        <div class="login-logo-text">
+          <span class="logo-hl" style="font-size:30px">HentaiLA</span>
+          <span class="logo-admin" style="font-size:12px;letter-spacing:3px">Admin</span>
+        </div>
+        <div class="login-subtitle">Panel Interno · Acceso Restringido</div>
+      </div>
+      <div class="login-form">
+        <div class="form-group">
+          <label for="loginPassword">🔐 Contraseña de acceso</label>
+          <div class="login-pass-wrap">
+            <input type="password" id="loginPassword" class="input"
+              placeholder="••••••••" autocomplete="off" />
+            <button class="login-show-btn" onclick="togglePasswordVisibility()" title="Mostrar/ocultar">👁️</button>
+          </div>
+        </div>
+        <div class="login-error" id="loginError">❌ Contraseña incorrecta</div>
+        <button class="btn-primary" id="loginBtn" onclick="doLogin()"
+          style="width:100%;padding:14px;font-size:15px;justify-content:center">
+          Entrar →
+        </button>
+      </div>
+      <div class="login-footer">Solo para uso interno del equipo de HentaiLA</div>
+    </div>
+  </div>
+
   <div class="app">
 
     <!-- ══════════════ HEADER ══════════════ -->
@@ -45,6 +76,8 @@
             <span class="hstat-val" id="hStatPendRed">—</span>
           </div>
         </div>
+        <div class="user-indicator" id="userIndicator" style="display:none"></div>
+        <button class="logout-btn" id="logoutBtn" onclick="doLogout()" style="display:none" title="Cerrar sesión">↪ Salir</button>
       </div>
     </header>
 
@@ -90,6 +123,15 @@
       <!-- RIGHT COLUMN: DASHBOARD -->
       <aside class="dashboard">
         <div class="dashboard-title">📊 Dashboard</div>
+
+        <!-- TARJETA DE GRUPO (solo Experto) -->
+        <div class="group-card" id="groupCard" style="display:none">
+          <div class="group-icon">👥</div>
+          <div class="group-info">
+            <div class="group-name" id="groupCardName"></div>
+            <div class="group-members" id="groupCardMembers"></div>
+          </div>
+        </div>
 
         <div class="progress-card">
           <div class="progress-header">
