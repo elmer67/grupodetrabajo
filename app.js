@@ -1,4 +1,4 @@
-﻿/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    HentaiLA Admin — app.js
    Vanilla JS + Supabase JS v2 (CDN)
    ═══════════════════════════════════════════════════════ */
@@ -925,7 +925,7 @@ function onServerInput(input) {
   // Actualizar estado del bloque
   const block  = input.closest('.ep-block')
   if (!block) return
-  const inputs = [...block.querySelectorAll('input[data-server-name]')]
+  const inputs = [...block.querySelectorAll('input[data-server-id]')]
   const nFilled = inputs.filter(i => i.value.trim()).length
   const nTotal  = embedServers.length
   const statEl  = document.getElementById(`epStat_${epId}`)
@@ -940,24 +940,7 @@ function onServerInput(input) {
         ? `⚠️ <small>${nFilled}/${nTotal}</small>`
         : `⚪ <small>0/${nTotal}</small>`
   }
-}_${servId}`)
-  if (dot) dot.classList.toggle('filled', filled)
 
-  // Actualizar estado del bloque
-  const block  = input.closest('.ep-block')
-  if (!block) return
-  const inputs = [...block.querySelectorAll('input[data-server-id]')]
-  const nFilled = inputs.filter(i => i.value.trim()).length
-  const nTotal  = embedServers.length
-  const statEl  = document.getElementById(`epStat_${epId}`)
-
-  if (statEl) {
-    statEl.innerHTML = nFilled === nTotal
-      ? `✅ <small>${nFilled}/${nTotal}</small>`
-      : nFilled > 0
-        ? `⚠️ <small>${nFilled}/${nTotal}</small>`
-        : `⚪ <small>${nFilled}/${nTotal}</small>`
-  }
   block.classList.toggle('ep-done',    nFilled === nTotal && nTotal > 0)
   block.classList.toggle('ep-partial', nFilled > 0 && nFilled < nTotal)
 }
