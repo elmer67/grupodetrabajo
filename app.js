@@ -1,4 +1,4 @@
-/* ═══════════════════════════════════════════════════════
+﻿/* ═══════════════════════════════════════════════════════
    HentaiLA Admin — app.js
    Vanilla JS + Supabase JS v2 (CDN)
    ═══════════════════════════════════════════════════════ */
@@ -821,28 +821,28 @@ function buildEpBlockRedes(ep) {
 
         <!-- REPRODUCTORES: todos los servidores (MP4Upload incluido como embed) -->
         <div class="form-group">
-          <label>?? Reproductores (Embed) (<span id="epFilledCount_"></span>/ listos)</label>
+          <label>📺 Reproductores (Embed) (<span id="epFilledCount_${ep.id_episodio}">${filled}</span>/${total} listos)</label>
           <div class="server-grid">
             ${embedServers.map(s => {
               const lv    = cache.embed[s.id_servidor]
               const val   = lv?.url_video || ''
               const isMp4 = mp4Server && s.id_servidor === mp4Server.id_servidor
-              return \
+              return `
                 <div class="server-field">
                   <div class="server-label">
-                    <span class="sdot \" id="dot_\_\"></span>
-                    \`\
+                    <span class="sdot ${val ? 'filled' : ''}" id="dot_${ep.id_episodio}_${s.id_servidor}"></span>
+                    ${isMp4 ? '<span style="color:#00b894">MP4UPLOAD <small style="font-size:8px">(EMBED)</small></span>' : escapeHtml(s.nombre)}
                   </div>
                   <input type="url" class="input"
-                    value="\"
-                    placeholder="\"
-                    data-ep-id="\"
-                    data-server-id="\"
-                    data-server-name="\"
-                    data-link-id="\"
+                    value="${escapeAttr(val)}"
+                    placeholder="https://..."
+                    data-ep-id="${ep.id_episodio}"
+                    data-server-id="${s.id_servidor}"
+                    data-server-name="${escapeAttr(s.nombre)}"
+                    data-link-id="${lv?.id_link || ''}"
                     oninput="markDirty(); onServerInput(this)"
                     onchange="validateUrlInput(this)" />
-                </div>\
+                </div>`
             }).join('')}
           </div>
         </div>
@@ -850,39 +850,39 @@ function buildEpBlockRedes(ep) {
         <!-- LINKS DE DESCARGA (Auto-generados) -->
         <div class="form-group" style="margin-top: 16px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <label style="margin:0;">?? Links de Descarga (Auto-generados)</label>
-            <button class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="toggleManualDl(\)">?? Edici�n Manual</button>
+            <label style="margin:0;">📥 Links de Descarga (Auto-generados)</label>
+            <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="toggleManualDl(${ep.id_episodio})">✏️ Edición Manual</button>
           </div>
-          <div class="server-grid dl-grid-\">
+          <div class="server-grid dl-grid-${ep.id_episodio}">
             ${embedServers.map(s => {
               const lv = cache.descargas[s.id_servidor]
               const val = lv?.url_video || ''
               
-              return \
+              return `
                 <div class="server-field">
                   <div class="server-label">
-                    <span class="sdot \" id="dot_dl_\_\"></span>
-                    \
+                    <span class="sdot ${val ? 'filled' : ''}" id="dot_dl_${ep.id_episodio}_${s.id_servidor}"></span>
+                    ${escapeHtml(s.nombre)}
                   </div>
-                  <input type="url" class="input dl-input-\"
-                    value="\"
+                  <input type="url" class="input dl-input-${ep.id_episodio}"
+                    value="${escapeAttr(val)}"
                     placeholder="Auto-generado"
-                    data-ep-id="\"
-                    data-server-id="\"
-                    data-link-id="\"
+                    data-ep-id="${ep.id_episodio}"
+                    data-server-id="${s.id_servidor}"
+                    data-link-id="${lv?.id_link || ''}"
                     oninput="markDirty(); onDlInput(this)"
                     onchange="validateUrlInput(this)"
                     readonly />
-                </div>\
+                </div>`
             }).join('')}
           </div>
         </div>
       </div>
-    </div>\
+    </div>`
 }
 
 function toggleManualDl(epId) {
-  const inputs = document.querySelectorAll(\.dl-input-\\\);
+  const inputs = document.querySelectorAll(`.dl-input-${epId}`);
   let isReadonly = false;
   inputs.forEach(input => {
     if(input.hasAttribute('readonly')) {
@@ -892,14 +892,14 @@ function toggleManualDl(epId) {
       input.setAttribute('readonly', 'true');
     }
   });
-  showToast(isReadonly ? 'Edici�n manual activada' : 'Modo auto-generado activado', 'info');
+  showToast(isReadonly ? 'Edición manual activada' : 'Modo auto-generado activado', 'info');
 }
 
 function onDlInput(input) {
   const epId = input.dataset.epId;
   const servId = input.dataset.serverId;
   const val = input.value.trim();
-  const dot = document.getElementById(\dot_dl_\\\_\\\);
+  const dot = document.getElementById(`dot_dl_${epId}_${servId}`);
   if (dot) dot.classList.toggle('filled', !!val);
 }
 
