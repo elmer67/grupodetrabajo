@@ -441,10 +441,14 @@ function renderExperto() {
         </div>
         <div class="form-group" style="flex:1; margin-bottom:0;">
           <label>🏢 Estudio</label>
-          <input type="text" class="input" id="animeStudio" value="${escapeAttr(currentAnime.studio || '')}" placeholder="Ej. Pink Pineapple" list="studioList" oninput="markDirty(); renderUnsavedBanner()" />
-          <datalist id="studioList">
-            ${allStudios.map(s => `<option value="${escapeAttr(s)}">`).join('')}
-          </datalist>
+          <div class="genres-wrap" id="studioWrap" style="margin-bottom:6px;">${buildStudioChip()}</div>
+          <div class="genre-add-row" id="studioAddRow" style="${currentAnime.studio ? 'display:none;' : 'display:flex;'}">
+            <input type="text" class="genre-select" id="studioInput" list="studioList" placeholder="+ Agregar estudio..." />
+            <datalist id="studioList">
+              ${allStudios.map(s => `<option value="${escapeAttr(s)}">`).join('')}
+            </datalist>
+            <button class="btn-secondary" onclick="addStudio()" style="padding:10px 16px;font-size:13px">Agregar</button>
+          </div>
         </div>
       </div>
 
@@ -482,6 +486,14 @@ function buildGenreChips() {
       <span class="chip-x" onclick="removeGenre(${g.id_genero})" title="Quitar">✕</span>
     </span>`
   }).join('')
+}
+
+function buildStudioChip() {
+  if (!currentAnime.studio) return '<span class="no-genres">Sin estudio asignado</span>'
+  return `<span class="genre-chip">
+    ${escapeHtml(currentAnime.studio)}
+    <span class="chip-x" onclick="removeStudio()" title="Quitar">✕</span>
+  </span>`
 }
 
 function buildEpBlockExperto(ep, forceNum = null) {
@@ -564,15 +576,39 @@ function refreshGenreUI() {
   renderUnsavedBanner()
 }
 
+function addStudio() {
+  const inp = document.getElementById('studioInput')
+  const val = inp.value.trim()
+  if (!val) return
+  currentAnime.studio = val
+  inp.value = ''
+  markDirty()
+  refreshStudioUI()
+}
+
+function removeStudio() {
+  currentAnime.studio = null
+  markDirty()
+  refreshStudioUI()
+}
+
+function refreshStudioUI() {
+  document.getElementById('studioWrap').innerHTML = buildStudioChip()
+  const addRow = document.getElementById('studioAddRow')
+  if (addRow) {
+    addRow.style.display = currentAnime.studio ? 'none' : 'flex'
+  }
+  renderUnsavedBanner()
+}
+
 // Banner de cambios no guardados en géneros y detalles
 function renderUnsavedBanner() {
   const existing = document.getElementById('unsavedBanner')
   
   const anoInput = document.getElementById('animeAno')
-  const studioInput = document.getElementById('animeStudio')
   
   const currentAno = anoInput && anoInput.value ? parseInt(anoInput.value) : null
-  const currentStudio = studioInput ? (studioInput.value.trim() || null) : null
+  const currentStudio = currentAnime.studio
   
   const hasChanges = !setsEqual(currentGeneroIds, originalGeneroIds) ||
                      originalAnimeAno !== currentAno ||
@@ -620,12 +656,13 @@ function revertirDetalles() {
   currentGeneroIds = new Set(originalGeneroIds)
   const anoInput = document.getElementById('animeAno')
   if (anoInput) anoInput.value = originalAnimeAno || ''
-  const studioInput = document.getElementById('animeStudio')
-  if (studioInput) studioInput.value = originalAnimeStudio || ''
+  
+  currentAnime.studio = originalAnimeStudio
   
   markDirty()
   document.getElementById('unsavedBanner')?.remove()
   refreshGenreUI()
+  refreshStudioUI()
   showToast('Cambios revertidos al estado original', 'info')
 }
 
