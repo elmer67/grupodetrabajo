@@ -812,7 +812,7 @@ function buildEpBlockRedes(ep) {
             ${mp4Url
               ? `<span class="mp4-url" title="${escapeAttr(mp4Url)}">${escapeHtml(mp4Url)}</span>
                  <div style="display:flex; gap:8px;">
-     <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="copyFakeName(${ep.numero}, ${currentAnime.id_anime}, `${escapeAttr(ep.titulo_episodio || '')}`)">📋 Copiar Nombre Falso</button>
+     <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="copyFakeName(${ep.numero}, ${currentAnime.id_anime}, '${escapeAttr(ep.titulo_episodio || '')}')">📋 Copiar Nombre Falso</button>
      <a class="mp4-open" href="${escapeAttr(mp4Url)}" target="_blank" rel="noopener noreferrer">Descargar ↗</a>
    </div>`
               : `<span class="mp4-no-url">El Experto aún no ha subido el link de descarga de MP4Upload</span>`}
