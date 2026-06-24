@@ -1262,3 +1262,34 @@ a { color: inherit; text-decoration: none; }
   outline: none !important;
   box-shadow: none !important;
 }
+
+/* ── Estado del Link (Activo / Caído) ── */
+.link-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  transition: all 0.18s ease;
+}
+.link-status-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.link-status-btn.link-activo {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #10b981;
+}
+.link-status-btn.link-caido {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+}

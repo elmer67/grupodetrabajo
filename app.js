@@ -377,11 +377,12 @@ async function selectAnime(id) {
         .from('links_videos').select('*').in('id_episodio', epIds)
 
       ;(lv || []).forEach(l => {
-        if (!linksCache[l.id_episodio]) linksCache[l.id_episodio] = { mp4: null, embed: {}, descargas: {} }
-        if (l.es_descarga) {
-          linksCache[l.id_episodio].mp4 = l
-        } else {
-          linksCache[l.id_episodio].embed[l.id_servidor] = l
+        if (!linksCache[l.id_episodio]) linksCache[l.id_episodio] = { hls: null, mp4_sub: null, mp4_eng: null }
+        if (l.id_servidor === 14) {
+          linksCache[l.id_episodio].hls = l
+        } else if (l.id_servidor === 13) {
+          if (l.idioma === 'eng') linksCache[l.id_episodio].mp4_eng = l
+          else linksCache[l.id_episodio].mp4_sub = l
         }
       })
     }
@@ -461,6 +462,19 @@ function renderExperto() {
         </div>
       </div>
 
+      <!-- PREGUNTA AKINATOR Y CONTEXTO (GENERAL ANIME) -->
+      <div class="form-group">
+        <label>❓ Pregunta Akinator (General del Anime)</label>
+        <div class="input-preg-wrapper" style="margin-bottom:12px;">
+          <span class="preg-prefix">¿El hentai que buscas</span>
+          <input type="text" class="input" id="animePregunta" value="${escapeAttr(currentAnime.pregunta_akinator || '')}" placeholder="trata sobre elfas..." oninput="markDirty(); renderUnsavedBanner()" />
+          <span class="preg-suffix">?</span>
+        </div>
+        
+        <label style="margin-top:12px;display:block;font-weight:600;color:var(--text-dim);font-size:12px;">🤖 Contexto IA (Resumen Global)</label>
+        <textarea class="input" id="animeContextoIA" rows="3" placeholder="Resumen corto pero específico del hentai completo..." oninput="markDirty(); renderUnsavedBanner()" style="margin-bottom:24px;resize:vertical;">${escapeHtml(currentAnime.contexto_ia || '')}</textarea>
+      </div>
+
       <!-- CAPÍTULOS -->
       <div class="form-group">
         <label>📚 Capítulos</label>
@@ -518,10 +532,8 @@ function buildEpBlockExperto(ep, forceNum = null) {
   if (preg.startsWith(prefix) && preg.endsWith(suffix)) {
     preg = preg.slice(prefix.length, -suffix.length).trim()
   }
-  const cache = ep ? linksCache[ep.id_episodio] : null
-  const mp4  = cache?.mp4?.url_video || ''
   const done  = ep && ep.estado_experto === 'completado'
-  const partial = !done && (mp4 || preg)
+  const partial = !done && (preg)
   const canDel = num !== 1 || (currentEpisodios.length > 0)
 
   return `
@@ -534,18 +546,10 @@ function buildEpBlockExperto(ep, forceNum = null) {
         ${canDel ? `<button class="ep-del" onclick="deleteEpisode(event, this.closest('.ep-block'))" title="Eliminar capítulo">🗑️</button>` : ''}
         <span class="ep-chevron">▼</span>
       </div>
-      <div class="ep-body experto-grid">
-        <div class="form-group">
-          <label>🔗 Link MP4Upload</label>
-          <input type="url" class="input mp4-in"
-            value="${escapeAttr(mp4)}"
-            placeholder="https://www.mp4upload.com/..."
-            data-ep-id="${epId}"
-            oninput="markDirty(); validateUrlInput(this)" />
-        </div>
-        <div class="form-group">
-          <label>❓ Pregunta Akinator</label>
-          <div class="input-preg-wrapper">
+      <div class="ep-body experto-grid" style="grid-template-columns: 1fr;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>❓ Pregunta Akinator (Específica del Capítulo)</label>
+          <div class="input-preg-wrapper" style="margin-bottom:12px;">
             <span class="preg-prefix">¿El hentai que buscas tiene</span>
             <input type="text" class="input preg-in"
               value="${escapeAttr(preg)}"
@@ -554,6 +558,9 @@ function buildEpBlockExperto(ep, forceNum = null) {
               oninput="markDirty()" />
             <span class="preg-suffix">?</span>
           </div>
+          
+          <label style="display:block;font-weight:600;color:var(--text-dim);font-size:12px;">🤖 Contexto IA (Resumen del Capítulo)</label>
+          <textarea class="input contexto-ia-in" rows="2" placeholder="Resumen de los eventos clave de este capítulo..." oninput="markDirty()" style="resize:vertical;">${escapeHtml(ep ? (ep.contexto_ia || '') : '')}</textarea>
         </div>
       </div>
     </div>`
@@ -702,6 +709,8 @@ function revertirDetalles() {
   currentEstudioIds = new Set(originalEstudioIds)
   const anoInput = document.getElementById('animeAno')
   if (anoInput) anoInput.value = originalAnimeAno || ''
+  const pregInput = document.getElementById('animePregunta')
+  if (pregInput) pregInput.value = currentAnime.pregunta_akinator || ''
   
   markDirty()
   document.getElementById('unsavedBanner')?.remove()
@@ -777,36 +786,21 @@ async function saveExperto(silent = false) {
       if (error) throw error
     }
 
-    // ── 1.5. Año ─────────────────────────────────────
-    const newAnoInput = document.getElementById('animeAno')?.value
-    const newAno = newAnoInput ? parseInt(newAnoInput) : null
-    
-    if (currentAnime['año'] !== newAno) {
-      const { error: updErr } = await db.from('animes').update({ 'año': newAno }).eq('id_anime', currentAnime.id_anime)
-      if (updErr) throw updErr
-      currentAnime['año'] = newAno
-    }
-
     // ── 2. Episodios ─────────────────────────────────
     const blocks = document.querySelectorAll('#episodesList .ep-block')
     for (const block of blocks) {
       const rawId   = block.dataset.epId
       const num     = parseInt(block.dataset.num)
-      const mp4In  = block.querySelector('.mp4-in')
       const pregIn  = block.querySelector('.preg-in')
-      const mp4Url = mp4In?.value.trim() || ''
       let preg    = pregIn?.value.trim() || ''
-      if (preg) {
+      if (preg && !preg.includes('¿El hentai que buscas tiene')) {
         preg = `¿El hentai que buscas tiene ${preg}?`
       }
+      
+      const ctxIn = block.querySelector('.contexto-ia-in')
+      const ctxText = ctxIn?.value.trim() || null
 
-      // Validar URL si se ingresó
-      if (mp4Url && !validateUrl(mp4Url)) {
-        showToast(`URL de MP4Upload inválida en Cap. ${num}`, 'error')
-        continue
-      }
-
-      const estadoExperto = (mp4Url && preg) ? 'completado' : 'pendiente'
+      const estadoExperto = preg ? 'completado' : 'pendiente'
       let episodioId
 
       if (String(rawId).startsWith('new_')) {
@@ -815,13 +809,14 @@ async function saveExperto(silent = false) {
           .select('id_episodio').eq('id_anime', currentAnime.id_anime).eq('numero', num).maybeSingle()
         if (exists) {
           episodioId = exists.id_episodio
-          await db.from('episodios').update({ pregunta_akinator: preg || null, estado_experto: estadoExperto })
+          await db.from('episodios').update({ pregunta_akinator: preg || null, contexto_ia: ctxText, estado_experto: estadoExperto })
             .eq('id_episodio', episodioId)
         } else {
           const { data: newEp, error: nErr } = await db.from('episodios').insert({
             id_anime: currentAnime.id_anime,
             numero: num,
             pregunta_akinator: preg || null,
+            contexto_ia: ctxText,
             estado_experto: estadoExperto,
             estado_links: 'pendiente'
           }).select('id_episodio').single()
@@ -833,37 +828,34 @@ async function saveExperto(silent = false) {
         episodioId = parseInt(rawId)
         const { error: uErr } = await db.from('episodios').update({
           pregunta_akinator: preg || null,
+          contexto_ia: ctxText,
           estado_experto:    estadoExperto
         }).eq('id_episodio', episodioId)
         if (uErr) throw uErr
       }
 
-      // ── Link MP4Upload ──
-      if (mp4Server && mp4Url) {
-        if (!linksCache[episodioId]) linksCache[episodioId] = { mp4: null, embed: {}, descargas: {} }
-        const existMp4 = linksCache[episodioId].mp4
-
-        if (existMp4) {
-          await db.from('links_videos').update({ url_video: mp4Url }).eq('id_link', existMp4.id_link)
-          linksCache[episodioId].mp4.url_video = mp4Url
-        } else {
-          const { data: nl, error: nlErr } = await db.from('links_videos').insert({
-            id_episodio: episodioId,
-            id_servidor: mp4Server.id_servidor,
-            url_video:   mp4Url,
-            es_descarga: true,
-            idioma:      'sub'
-          }).select().single()
-          if (nlErr) throw nlErr
-          linksCache[episodioId].mp4 = nl
-        }
-      }
-
       // Actualizar indicador visual
       const statusEl = block.querySelector('.ep-status')
-      if (statusEl) statusEl.textContent = estadoExperto === 'completado' ? '✅' : (mp4Url || preg ? '🔶' : '⚪')
+      if (statusEl) statusEl.textContent = estadoExperto === 'completado' ? '✅' : (preg ? '🔶' : '⚪')
       block.classList.toggle('ep-done', estadoExperto === 'completado')
-      block.classList.toggle('ep-partial', estadoExperto !== 'completado' && !!(mp4Url || preg))
+      block.classList.toggle('ep-partial', estadoExperto !== 'completado' && !!preg)
+    }
+
+    // ── Actualizar Pregunta General y Contexto IA del Anime ──
+    const newAnoInput = document.getElementById('animeAno')?.value
+    const newAno = newAnoInput ? parseInt(newAnoInput) : null
+    let nuevaPreguntaGeneral = document.getElementById('animePregunta')?.value.trim() || null
+    let nuevoContextoIA = document.getElementById('animeContextoIA')?.value.trim() || null
+    
+    const updates = {}
+    if (currentAnime['año'] !== newAno) updates['año'] = newAno
+    if (currentAnime.pregunta_akinator !== nuevaPreguntaGeneral) updates.pregunta_akinator = nuevaPreguntaGeneral
+    if (currentAnime.contexto_ia !== nuevoContextoIA) updates.contexto_ia = nuevoContextoIA
+
+    if (Object.keys(updates).length > 0) {
+      const { error: updErr } = await db.from('animes').update(updates).eq('id_anime', currentAnime.id_anime)
+      if (updErr) throw updErr
+      Object.assign(currentAnime, updates)
     }
 
     // Actualizar estado para la UI de géneros y detalles
@@ -928,11 +920,19 @@ function renderRedes() {
 }
 
 function buildEpBlockRedes(ep) {
-  const cache      = linksCache[ep.id_episodio] || { mp4: null, embed: {}, descargas: {} }
-  const mp4Url    = cache.mp4?.url_video || ''
-  const filled     = embedServers.filter(s => cache.embed[s.id_servidor]?.url_video).length
-  const total      = embedServers.length
-  const isComplete = filled === total && total > 0
+  const cache      = linksCache[ep.id_episodio] || { hls: null, mp4_sub: null, mp4_eng: null }
+  
+  const hlsUrl     = cache.hls?.url_video || ''
+  const mp4SubUrl  = cache.mp4_sub?.url_video || ''
+  const mp4EngUrl  = cache.mp4_eng?.url_video || ''
+
+  const inputs = [hlsUrl, mp4SubUrl, mp4EngUrl]
+  const filled = inputs.filter(url => url !== '').length
+  const total = 3
+  
+  // Estado del link: activo por defecto, caido si ya fue marcado así
+  const isActivo   = ep.estado_links !== 'caido'
+  const isComplete = filled === total && isActivo
   const isPartial  = filled > 0 && !isComplete
   const done       = ep.estado_experto === 'completado'
 
@@ -941,159 +941,172 @@ function buildEpBlockRedes(ep) {
          data-ep-id="${ep.id_episodio}" data-num="${ep.numero}">
       <div class="ep-header" onclick="toggleEpisode(this.parentElement)">
         <span class="ep-num">Cap. ${ep.numero}</span>
-        <span class="ep-label">${ep.titulo_episodio ? escapeHtml(ep.titulo_episodio) : `Capítulo ${ep.numero}`}</span>
+        <span class="ep-label">${ep.titulo_episodio ? escapeHtml(ep.titulo_episodio) : `Cap\u00edtulo ${ep.numero}`}</span>
         <span class="ep-status" id="epStat_${ep.id_episodio}">
-          ${isComplete ? '✅' : isPartial ? '⚠️' : '⚪'}
+          ${isComplete ? '\u2705' : isPartial ? '\u26a0\ufe0f' : '\u26aa'}
           <small>${filled}/${total}</small>
         </span>
         ${!done ? '<span style="font-size:10px;color:var(--text-dim);margin-left:4px">Experto pendiente</span>' : ''}
-        <span class="ep-chevron">▼</span>
+        <span class="ep-chevron">\u25bc</span>
       </div>
-      <div class="ep-body">
-        <!-- mp4 LINK DE DESCARGA (readonly — lo pone el Experto) -->
-        <div class="form-group">
-          <label>⬇️ mp4 — Link de descarga <span style="color:var(--text-dim);font-weight:400;text-transform:none;font-size:10px">(provisto por el Experto)</span></label>
-          <div class="mp4-display">
-            ${mp4Url
-              ? `<span class="mp4-url" title="${escapeAttr(mp4Url)}">${escapeHtml(mp4Url)}</span>
-                 <div style="display:flex; gap:8px;">
-     <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="copyFakeName(${ep.numero}, ${currentAnime.id_anime}, '${escapeAttr(ep.titulo_episodio || '')}')">📋 Copiar Nombre Falso</button>
-     <a class="mp4-open" href="${escapeAttr(mp4Url)}" target="_blank" rel="noopener noreferrer">Descargar ↗</a>
-   </div>`
-              : `<span class="mp4-no-url">El Experto aún no ha subido el link de descarga de MP4Upload</span>`}
+      <div class="ep-body" style="display:flex; flex-direction:column; gap:20px;">
+        
+        <!-- ESTADO DEL LINK (activo / caido) -->
+        <div class="form-group" style="margin-bottom:0;">
+          <label style="margin-bottom:8px;display:block;">\ud83d\udce1 Estado del Link</label>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button type="button"
+              class="link-status-btn ${isActivo ? 'link-activo' : ''}"
+              id="btnActivo_${ep.id_episodio}"
+              onclick="setLinkStatus(${ep.id_episodio}, 'activo', this)">
+              \ud83d\udfe2 Activo
+            </button>
+            <button type="button"
+              class="link-status-btn ${!isActivo ? 'link-caido' : ''}"
+              id="btnCaido_${ep.id_episodio}"
+              onclick="setLinkStatus(${ep.id_episodio}, 'caido', this)">
+              \ud83d\udd34 Ca\u00eddo
+            </button>
+            <span style="font-size:11px;color:var(--text-dim);" id="linkStatusLabel_${ep.id_episodio}">
+              ${isActivo ? 'Los links est\u00e1n funcionando correctamente' : '\u26a0\ufe0f Links ca\u00eddos \u2014 se necesita re-subida'}
+            </span>
           </div>
         </div>
 
-        <!-- REPRODUCTORES: todos los servidores (MP4Upload incluido como embed) -->
-        <div class="form-group">
-          <label>📺 Reproductores (Embed) (<span id="epFilledCount_${ep.id_episodio}">${filled}</span>/${total} listos)</label>
+        <!-- HLS PREMIUM -->
+        <div class="form-group" style="margin-bottom:0;">
+          <label>\ud83d\udd17 HLS Premium (.m3u8) <span style="color:var(--text-dim);font-size:10px;font-weight:normal;">Servidor 14</span></label>
+          <div class="server-field" style="border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.05);">
+            <div class="server-label">
+              <span class="sdot ${hlsUrl ? 'filled' : ''}" id="dot_${ep.id_episodio}_hls"></span>
+              <span style="color:#10b981; font-weight:600;">HLS CLOUDFLARE</span>
+            </div>
+            <input type="url" class="input redes-in"
+              value="${escapeAttr(hlsUrl)}"
+              placeholder="https://pub-xxxx.r2.dev/hls/..."
+              data-ep-id="${ep.id_episodio}"
+              data-type="hls"
+              data-link-id="${cache.hls?.id_link || ''}"
+              oninput="markDirty(); onRedesInput(this)"
+              onchange="validateUrlInput(this)" />
+          </div>
+        </div>
+
+        <!-- MP4UPLOAD (SUB Y ENG) -->
+        <div class="form-group" style="margin-bottom:0;">
+          <label>\ud83d\udcfa MP4Upload (Archivos AV1 de Respaldo) <span style="color:var(--text-dim);font-size:10px;font-weight:normal;">Servidor 13</span></label>
+          <p style="font-size:11px; color:var(--text-dim); margin-bottom:8px;">Pega el enlace de <strong>descarga</strong> (ej: https://www.mp4upload.com/xxxx). El reproductor se generar\u00e1 autom\u00e1ticamente.</p>
           <div class="server-grid">
-            ${embedServers.map(s => {
-              const lv    = cache.embed[s.id_servidor]
-              let val     = lv?.url_video || ''
-              const isMp4 = mp4Server && s.id_servidor === mp4Server.id_servidor
-              
-              if (isMp4 && !val && mp4Url) {
-                const m = mp4Url.match(/mp4upload\.com\/([a-zA-Z0-9]+)/);
-                if (m) val = `https://www.mp4upload.com/embed-${m[1]}.html`;
-              }
+            <!-- ES -->
+            <div class="server-field">
+              <div class="server-label">
+                <span class="sdot ${mp4SubUrl ? 'filled' : ''}" id="dot_${ep.id_episodio}_mp4_sub"></span>
+                <span style="color:#f472b6;">Espa\u00f1ol (SUB)</span>
+              </div>
+              <input type="url" class="input redes-in"
+                value="${escapeAttr(mp4SubUrl)}"
+                placeholder="https://www.mp4upload.com/..."
+                data-ep-id="${ep.id_episodio}"
+                data-type="mp4_sub"
+                data-link-id="${cache.mp4_sub?.id_link || ''}"
+                oninput="markDirty(); onRedesInput(this)"
+                onchange="validateUrlInput(this)" />
+            </div>
 
-              return `
-                <div class="server-field">
-                  <div class="server-label">
-                    <span class="sdot ${val ? 'filled' : ''}" id="dot_${ep.id_episodio}_${s.id_servidor}"></span>
-                    ${isMp4 ? '<span style="color:#00b894">MP4UPLOAD</span>' : escapeHtml(s.nombre)}
-                  </div>
-                  <input type="url" class="input"
-                    value="${escapeAttr(val)}"
-                    placeholder="https://..."
-                    data-ep-id="${ep.id_episodio}"
-                    data-server-id="${s.id_servidor}"
-                    data-server-name="${escapeAttr(s.nombre)}"
-                    data-link-id="${lv?.id_link || ''}"
-                    oninput="markDirty(); onServerInput(this)"
-                    onchange="validateUrlInput(this)" />
-                </div>`
-            }).join('')}
+            <!-- ENG -->
+            <div class="server-field">
+              <div class="server-label">
+                <span class="sdot ${mp4EngUrl ? 'filled' : ''}" id="dot_${ep.id_episodio}_mp4_eng"></span>
+                <span style="color:#38bdf8;">Ingl\u00e9s (ENG)</span>
+              </div>
+              <input type="url" class="input redes-in"
+                value="${escapeAttr(mp4EngUrl)}"
+                placeholder="https://www.mp4upload.com/..."
+                data-ep-id="${ep.id_episodio}"
+                data-type="mp4_eng"
+                data-link-id="${cache.mp4_eng?.id_link || ''}"
+                oninput="markDirty(); onRedesInput(this)"
+                onchange="validateUrlInput(this)" />
+            </div>
           </div>
         </div>
 
-        <!-- LINKS DE DESCARGA (Auto-generados) -->
-        <div class="form-group" style="margin-top: 16px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <label style="margin:0;">📥 Links de Descarga (Auto-generados)</label>
-            <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="toggleManualDl(${ep.id_episodio})">✏️ Edición Manual</button>
-          </div>
-          <div class="server-grid dl-grid-${ep.id_episodio}">
-            ${embedServers.filter(s => !(mp4Server && s.id_servidor === mp4Server.id_servidor)).map(s => {
-              const lv = cache.descargas[s.id_servidor]
-              const val = lv?.url_video || ''
-              
-              return `
-                <div class="server-field">
-                  <div class="server-label">
-                    <span class="sdot ${val ? 'filled' : ''}" id="dot_dl_${ep.id_episodio}_${s.id_servidor}"></span>
-                    ${escapeHtml(s.nombre)}
-                  </div>
-                  <input type="url" class="input dl-input-${ep.id_episodio}"
-                    value="${escapeAttr(val)}"
-                    placeholder="Auto-generado"
-                    data-ep-id="${ep.id_episodio}"
-                    data-server-id="${s.id_servidor}"
-                    data-link-id="${lv?.id_link || ''}"
-                    oninput="markDirty(); onDlInput(this)"
-                    onchange="validateUrlInput(this)"
-                    readonly />
-                </div>`
-            }).join('')}
-          </div>
-        </div>
       </div>
     </div>`
 }
 
-function toggleManualDl(epId) {
-  const inputs = document.querySelectorAll(`.dl-input-${epId}`);
-  let isReadonly = false;
-  inputs.forEach(input => {
-    if(input.hasAttribute('readonly')) {
-      input.removeAttribute('readonly');
-      isReadonly = true;
-    } else {
-      input.setAttribute('readonly', 'true');
-    }
-  });
-  showToast(isReadonly ? 'Edición manual activada' : 'Modo auto-generado activado', 'info');
-}
-
-function onDlInput(input) {
-  const epId = input.dataset.epId;
-  const servId = input.dataset.serverId;
-  const val = input.value.trim();
-  const dot = document.getElementById(`dot_dl_${epId}_${servId}`);
-  if (dot) dot.classList.toggle('filled', !!val);
-}
-
-function onServerInput(input) {
-  const epId   = input.dataset.epId
-  const servId = input.dataset.serverId
-  const sName  = input.dataset.serverName || ''
-  const val    = input.value.trim()
+function onRedesInput(input) {
+  const epId = input.dataset.epId
+  const type = input.dataset.type
+  const val  = input.value.trim()
   const filled = !!val
 
-  // Actualizar dot
-  const dot = document.getElementById(`dot_${epId}_${servId}`)
+  const dot = document.getElementById(`dot_${epId}_${type}`)
   if (dot) dot.classList.toggle('filled', filled)
 
-  // AUTO-FILL DOWNLOAD LINK
-  const dlInput = document.querySelector(`.dl-input-${epId}[data-server-id="${servId}"]`)
-  if (dlInput && dlInput.hasAttribute('readonly')) {
-    const derived = deriveDownloadLink(sName, val)
-    dlInput.value = derived
-    onDlInput(dlInput)
-  }
-
-  // Actualizar estado del bloque
   const block  = input.closest('.ep-block')
   if (!block) return
-  const inputs = [...block.querySelectorAll('input[data-server-id]')]
+  const inputs  = [...block.querySelectorAll('.redes-in')]
   const nFilled = inputs.filter(i => i.value.trim()).length
-  const nTotal  = embedServers.length
-  const statEl  = document.getElementById(`epStat_${epId}`)
-  
-  const epFilledCount = document.getElementById(`epFilledCount_${epId}`)
-  if (epFilledCount) epFilledCount.textContent = nFilled
+  const nTotal  = 3
 
+  // Considerar estado del link para el icono
+  const activoBtn = document.getElementById(`btnActivo_${epId}`)
+  const isActivo  = activoBtn ? activoBtn.classList.contains('link-activo') : true
+  const statEl    = document.getElementById(`epStat_${epId}`)
+
+  const isComplete = nFilled === nTotal && isActivo
   if (statEl) {
-    statEl.innerHTML = nFilled === nTotal
-      ? `✅ <small>${nFilled}/${nTotal}</small>`
+    statEl.innerHTML = isComplete
+      ? `\u2705 <small>${nFilled}/${nTotal}</small>`
       : nFilled > 0
-        ? `⚠️ <small>${nFilled}/${nTotal}</small>`
-        : `⚪ <small>0/${nTotal}</small>`
+        ? `\u26a0\ufe0f <small>${nFilled}/${nTotal}</small>`
+        : `\u26aa <small>0/${nTotal}</small>`
   }
 
-  block.classList.toggle('ep-done',    nFilled === nTotal && nTotal > 0)
-  block.classList.toggle('ep-partial', nFilled > 0 && nFilled < nTotal)
+  block.classList.toggle('ep-done',    isComplete)
+  block.classList.toggle('ep-partial', nFilled > 0 && !isComplete)
+}
+
+// Cambia el estado activo/caido del toggle y actualiza la UI
+function setLinkStatus(epId, status, clickedBtn) {
+  const block     = clickedBtn.closest('.ep-block')
+  const activoBtn = document.getElementById(`btnActivo_${epId}`)
+  const caidoBtn  = document.getElementById(`btnCaido_${epId}`)
+  const label     = document.getElementById(`linkStatusLabel_${epId}`)
+
+  activoBtn.classList.toggle('link-activo', status === 'activo')
+  activoBtn.classList.toggle('link-caido',  false)
+  caidoBtn.classList.toggle('link-caido',   status === 'caido')
+  caidoBtn.classList.toggle('link-activo',  false)
+
+  if (label) {
+    label.textContent = status === 'activo'
+      ? 'Los links est\u00e1n funcionando correctamente'
+      : '\u26a0\ufe0f Links ca\u00eddos \u2014 se necesita re-subida'
+  }
+
+  // Guardar en dataset para que saveRedes lo lea
+  block.dataset.linkStatus = status
+  markDirty()
+
+  // Actualizar icono del episodio
+  const inputs  = block ? [...block.querySelectorAll('.redes-in')] : []
+  const nFilled = inputs.filter(i => i.value.trim()).length
+  const nTotal  = 3
+  const isComplete = nFilled === nTotal && status === 'activo'
+  const statEl  = document.getElementById(`epStat_${epId}`)
+  if (statEl) {
+    statEl.innerHTML = isComplete
+      ? `\u2705 <small>${nFilled}/${nTotal}</small>`
+      : nFilled > 0
+        ? `\u26a0\ufe0f <small>${nFilled}/${nTotal}</small>`
+        : `\u26aa <small>0/${nTotal}</small>`
+  }
+  if (block) {
+    block.classList.toggle('ep-done',    isComplete)
+    block.classList.toggle('ep-partial', nFilled > 0 && !isComplete)
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -1110,17 +1123,35 @@ async function saveRedes(silent = false) {
     for (const block of blocks) {
       const epId   = parseInt(block.dataset.epId)
       const num    = block.dataset.num
-      const inputs = [...block.querySelectorAll('input[data-server-id]')]
+      const inputs = [...block.querySelectorAll('.redes-in')]
       let allFilled = true
 
       for (const input of inputs) {
-        const url    = input.value.trim()
-        const servId = parseInt(input.dataset.serverId)
-        const isDescarga = input.className.includes('dl-input')
+        let url    = input.value.trim()
+        const type   = input.dataset.type // 'hls', 'mp4_sub', 'mp4_eng'
         const linkId = input.dataset.linkId ? parseInt(input.dataset.linkId) : null
+        
+        let servId, idioma, esDescarga
+        
+        if (type === 'hls') {
+            servId = 14
+            idioma = 'sub'
+            esDescarga = false
+        } else if (type === 'mp4_sub') {
+            servId = 13
+            idioma = 'sub'
+            esDescarga = true
+            // Si por error pegan el embed, lo convertimos a descarga para la BD
+            url = deriveDownloadLink('mp4upload', url) || url 
+        } else if (type === 'mp4_eng') {
+            servId = 13
+            idioma = 'eng'
+            esDescarga = true
+            url = deriveDownloadLink('mp4upload', url) || url 
+        }
 
         if (url && !validateUrl(url)) {
-          showToast(`URL inválida en Cap. ${num} — ${allServidores.find(s=>s.id_servidor===servId)?.nombre}`, 'error')
+          showToast(`URL inválida en Cap. ${num} — ${type}`, 'error')
           if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar Links' }
           return
         }
@@ -1135,24 +1166,30 @@ async function saveRedes(silent = false) {
             id_episodio: epId,
             id_servidor: servId,
             url_video:   url,
-            es_descarga: isDescarga,
-            idioma:      'sub'
+            es_descarga: esDescarga,
+            idioma:      idioma
           }).select().single()
           if (error) throw error
           input.dataset.linkId = nl.id_link
-          if (!linksCache[epId])        linksCache[epId] = { mp4: linksCache[epId]?.mp4 || null, embed: {}, descargas: {} }
-          if (!linksCache[epId].embed) linksCache[epId].embed = {}
-          if (!linksCache[epId].descargas) linksCache[epId].descargas = {}
-          if (isDescarga) {
-            linksCache[epId].descargas[servId] = nl
-          } else {
-            linksCache[epId].embed[servId] = nl
-          }
+          if (!linksCache[epId]) linksCache[epId] = { hls: null, mp4_sub: null, mp4_eng: null }
+          linksCache[epId][type] = nl
         }
       }
 
       // Actualizar estado_links del episodio
-      const estadoLinks = allFilled ? 'completado' : 'pendiente'
+      // ✅ 'completado' = todos los links llenos + toggle en 'activo'
+      // 🔴 'caido'     = el de Redes lo marcó como caído manualmente
+      // ⏳ 'pendiente' = faltan links
+      const linkStatus = block.dataset.linkStatus
+        || (currentEpisodios.find(e => e.id_episodio === epId)?.estado_links === 'caido' ? 'caido' : 'activo')
+      let estadoLinks
+      if (!allFilled) {
+        estadoLinks = 'pendiente'
+      } else if (linkStatus === 'caido') {
+        estadoLinks = 'caido'
+      } else {
+        estadoLinks = 'completado'
+      }
       await db.from('episodios').update({ estado_links: estadoLinks }).eq('id_episodio', epId)
     }
 
