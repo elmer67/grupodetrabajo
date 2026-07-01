@@ -181,8 +181,8 @@
         <!-- ASIGNACIÓN DE LETRAS -->
         <div class="letras-section">
           <div class="letras-section-header">
-            <span>🗂️ Letras del Catálogo</span>
-            <button class="letras-sync-btn" onclick="loadLetras()" title="Sincronizar">↺</button>
+            <span id="letrasSectionTitle">🗂️ Letras del Catálogo</span>
+            <button class="letras-sync-btn" id="letrasSyncBtn" onclick="loadLetras()" title="Sincronizar">↺</button>
           </div>
 
           <!-- Resumen por grupo -->
@@ -192,7 +192,7 @@
           <div id="letrasGrid" class="letras-grid"></div>
 
           <!-- Verificar completadas -->
-          <button class="refresh-btn" onclick="checkCompletadas()" style="font-size:11px;padding:8px">
+          <button class="refresh-btn" id="letrasCheckBtn" onclick="checkCompletadas()" style="font-size:11px;padding:8px">
             🔍 Verificar letras completadas
           </button>
         </div>

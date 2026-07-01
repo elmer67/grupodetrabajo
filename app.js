@@ -27,17 +27,29 @@ function imgPath(dbPath) {
 //  CONTRASEÑAS — config de grupos
 // ─────────────────────────────────────────────────────
 const SESSIONS = {
-  'hideki123': { profile: 'experto', group: 'A', members: ['Jean Franco', 'Hideki'] },
-  'ortiz123':  { profile: 'experto', group: 'B', members: ['Osorio', 'Ortiz'] },
-  'kish123':   { profile: 'experto', group: 'C', members: ['Kish'] },
-  'flower123': { profile: 'redes',   group: null, members: null }
+  // ── EXPERTOS ────────────────────────────────────────
+  'hideki123':       { profile: 'experto', group: 'A', userName: 'Hideki' },
+  'jeanfranco123':   { profile: 'experto', group: 'A', userName: 'Jean Franco' },
+  'osorio123':       { profile: 'experto', group: 'B', userName: 'Osorio' },
+  'ortiz123':        { profile: 'experto', group: 'B', userName: 'Ortiz' },
+  'kish123':         { profile: 'experto', group: 'C', userName: 'Kish' },
+  // ── REDES (individuales) ────────────────────────────
+  'osorior123':      { profile: 'redes', group: 'A', userName: 'Osorio' },
+  'jeanfrancor123':  { profile: 'redes', group: 'B', userName: 'Jean Franco' },
+  'kishr123':        { profile: 'redes', group: 'C', userName: 'Kish' },
+  'maurizio123':     { profile: 'redes', group: 'D', userName: 'Maurizio' },
 }
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 const GRUPO_COLORS = {
   'A': { bg: 'rgba(124,58,237,.22)', border: 'rgba(124,58,237,.55)', text: '#a66ef5' },
   'B': { bg: 'rgba(236,72,153,.22)', border: 'rgba(236,72,153,.55)', text: '#f472b6' },
-  'C': { bg: 'rgba(14,165,233,.22)',  border: 'rgba(14,165,233,.55)',  text: '#38bdf8' }
+  'C': { bg: 'rgba(14,165,233,.22)',  border: 'rgba(14,165,233,.55)',  text: '#38bdf8' },
+  'D': { bg: 'rgba(16,185,129,.22)',  border: 'rgba(16,185,129,.55)',  text: '#34d399' }
+}
+const GRUPO_MEMBERS = {
+  'experto': { 'A': ['Hideki', 'Jean Franco'], 'B': ['Osorio', 'Ortiz'], 'C': ['Kish'] },
+  'redes':   { 'A': ['Osorio'], 'B': ['Jean Franco'], 'C': ['Kish'], 'D': ['Maurizio'] }
 }
 
 // ─────────────────────────────────────────────────────
@@ -62,6 +74,7 @@ let linksCache        = {}
 let dirty             = false
 let searchTimer       = null
 let letrasCache       = {}   // { 'A': { grupo:'A', completada:false }, ... }
+let letrasRedesCache  = {}   // Letras del equipo de Redes (tabla separada)
 let animeCountByLetra = {}   // { 'A': 45, 'B': 12, ... }
 
 // ─────────────────────────────────────────────────────
@@ -133,16 +146,19 @@ function applySession() {
   const lbl = document.getElementById('searchProfileLabel')
   if (lbl) lbl.textContent = currentProfile === 'experto' ? '🧠 Perfil Experto' : '📡 Perfil Redes'
 
-  // Cola de trabajo solo para Redes
+  // Cola de trabajo deshabilitada (Redes trabaja independiente con letras)
   const wq = document.getElementById('workQueue')
-  if (wq) wq.style.display = currentProfile === 'redes' ? 'block' : 'none'
+  if (wq) wq.style.display = 'none'
 
   // Indicador de usuario en header
   const ui = document.getElementById('userIndicator')
   if (ui) {
-    ui.innerHTML = currentSession.group
-      ? `👥 <strong>Grupo ${currentSession.group}</strong>`
-      : '📡 Redes'
+    const name = currentSession.userName || ''
+    if (currentProfile === 'experto') {
+      ui.innerHTML = `🧠 <strong>Grupo ${currentSession.group}</strong> — ${name}`
+    } else {
+      ui.innerHTML = `📡 <strong>Redes ${currentSession.group}</strong> — ${name}`
+    }
     ui.style.display = 'flex'
   }
 
@@ -150,18 +166,34 @@ function applySession() {
   const lb = document.getElementById('logoutBtn')
   if (lb) lb.style.display = 'inline-flex'
 
-  // Tarjeta de grupo en dashboard (solo Experto)
+  // Tarjeta de grupo en dashboard
   const gc = document.getElementById('groupCard')
   if (gc) {
     if (currentSession.group) {
       gc.style.display = 'flex'
       document.getElementById('groupCardName').textContent =
-        `Grupo ${currentSession.group}`
+        currentProfile === 'experto'
+          ? `Grupo ${currentSession.group}`
+          : `Redes ${currentSession.group}`
       document.getElementById('groupCardMembers').textContent =
-        currentSession.members.join(' · ')
+        (GRUPO_MEMBERS[currentProfile]?.[currentSession.group] || [currentSession.userName]).join(' · ')
     } else {
       gc.style.display = 'none'
     }
+  }
+
+  // Configurar sección de letras según perfil
+  const letrasTitle = document.getElementById('letrasSectionTitle')
+  const letrasSyncBtn = document.getElementById('letrasSyncBtn')
+  const letrasCheckBtn = document.getElementById('letrasCheckBtn')
+  if (currentProfile === 'redes') {
+    if (letrasTitle) letrasTitle.textContent = '📡 Letras de Redes'
+    if (letrasSyncBtn) letrasSyncBtn.setAttribute('onclick', 'loadLetrasRedes()')
+    if (letrasCheckBtn) letrasCheckBtn.setAttribute('onclick', 'checkCompletadasRedes()')
+  } else {
+    if (letrasTitle) letrasTitle.textContent = '🗂️ Letras del Catálogo'
+    if (letrasSyncBtn) letrasSyncBtn.setAttribute('onclick', 'loadLetras()')
+    if (letrasCheckBtn) letrasCheckBtn.setAttribute('onclick', 'checkCompletadas()')
   }
 
   updatePill()
@@ -195,8 +227,13 @@ async function startApp() {
     allStudios = stds || []
 
     await loadStats()
-    await loadLetras()         // cargar asignaciones de letras
-    setInterval(loadLetras, 45_000)  // sincronizar letras cada 45s
+    if (currentProfile === 'redes') {
+      await loadLetrasRedes()            // cargar letras de Redes
+      setInterval(loadLetrasRedes, 45_000)
+    } else {
+      await loadLetras()                 // cargar letras de Experto
+      setInterval(loadLetras, 45_000)
+    }
     if (currentProfile === 'redes') await loadColaRedes()
     setupSearch()
 
@@ -1405,6 +1442,158 @@ function renderLetrasGrid() {
       <div class="letra-cell ${completed ? 'lc-done' : isMine ? 'lc-mine' : isOthers ? 'lc-others' : 'lc-free'}"
            style="${bgStyle}"
            onclick="${canClick ? `claimLetra('${letra}')` : ''}"
+           title="${tooltip}">
+        <span class="letra-char">${completed ? '✓' : letra}</span>
+        ${claimedBy && !completed ? `<span class="letra-badge">${claimedBy}</span>` : ''}
+        ${count > 0 ? `<span class="letra-count">${count}</span>` : ''}
+      </div>`
+  }).join('')
+}
+
+// ─────────────────────────────────────────────────────
+//  LETRAS DEL CATÁLOGO — REDES (tabla independiente)
+// ─────────────────────────────────────────────────────
+async function loadLetrasRedes() {
+  // 1. Cargar asignaciones de Redes
+  const { data: asigs } = await db.from('letras_redes').select('*')
+  letrasRedesCache = {}
+  ;(asigs || []).forEach(r => {
+    letrasRedesCache[r.letra.toUpperCase()] = { grupo: r.grupo, completada: r.completada }
+  })
+
+  // 2. Contar animes por letra (reutiliza la misma lógica)
+  const { data: titulosData } = await db.from('animes').select('titulo')
+  animeCountByLetra = {}
+  ;(titulosData || []).forEach(a => {
+    const first = (a.titulo || '')[0]?.toUpperCase()
+    const key = first && /[A-Z]/.test(first) ? first : '#'
+    animeCountByLetra[key] = (animeCountByLetra[key] || 0) + 1
+  })
+
+  renderLetrasRedesGrid()
+}
+
+async function claimLetraRedes(letra) {
+  if (!currentSession?.group) return
+  const myGroup = currentSession.group
+  const existing = letrasRedesCache[letra]
+
+  // Letra completada → no se puede tocar
+  if (existing?.completada) return
+
+  // De otro grupo → bloqueada
+  if (existing?.grupo && existing.grupo !== myGroup) return
+
+  if (existing?.grupo === myGroup) {
+    // Liberar mi letra
+    const { error } = await db.from('letras_redes').delete().eq('letra', letra)
+    if (error) { showToast('Error al liberar: ' + error.message, 'error'); return }
+    delete letrasRedesCache[letra]
+    showToast(`Letra "${letra}" liberada`, 'info')
+  } else {
+    // Reclamar
+    const { error } = await db.from('letras_redes')
+      .upsert({ letra, grupo: myGroup, completada: false })
+    if (error) { showToast('Error al reclamar: ' + error.message, 'error'); return }
+    letrasRedesCache[letra] = { grupo: myGroup, completada: false }
+    showToast(`Letra "${letra}" asignada a Redes ${myGroup} ✅`, 'success')
+  }
+  renderLetrasRedesGrid()
+}
+
+async function checkCompletadasRedes() {
+  const toCheck = Object.entries(letrasRedesCache)
+    .filter(([, info]) => info.grupo && !info.completada)
+    .map(([l]) => l)
+
+  if (toCheck.length === 0) { showToast('No hay letras para verificar', 'info'); return }
+
+  showToast('Verificando letras de Redes...', 'info')
+
+  const { data: allAnimes } = await db.from('animes').select('id_anime, titulo')
+  const animesByLetra = {}
+  ;(allAnimes || []).forEach(a => {
+    const first = (a.titulo || '')[0]?.toUpperCase()
+    const key = first && /[A-Z]/.test(first) ? first : '#'
+    if (!animesByLetra[key]) animesByLetra[key] = []
+    animesByLetra[key].push(a.id_anime)
+  })
+
+  let newDone = 0
+  for (const letra of toCheck) {
+    const ids = animesByLetra[letra] || []
+    if (ids.length === 0) continue
+
+    // Para Redes: verificar que TODOS los episodios tengan estado_links = 'completado'
+    const [{ count: total }, { count: done }] = await Promise.all([
+      db.from('episodios').select('*', { count: 'exact', head: true }).in('id_anime', ids),
+      db.from('episodios').select('*', { count: 'exact', head: true })
+        .in('id_anime', ids).eq('estado_links', 'completado')
+    ])
+
+    if (total && total > 0 && done === total) {
+      await db.from('letras_redes').update({ completada: true }).eq('letra', letra)
+      letrasRedesCache[letra].completada = true
+      newDone++
+    }
+  }
+
+  showToast(
+    newDone > 0 ? `¡${newDone} letra${newDone > 1 ? 's' : ''} completada${newDone > 1 ? 's' : ''}! 🎉` : 'Ninguna completada aún',
+    newDone > 0 ? 'success' : 'info'
+  )
+  renderLetrasRedesGrid()
+}
+
+function renderLetrasRedesGrid() {
+  const gridEl    = document.getElementById('letrasGrid')
+  const summaryEl = document.getElementById('letrasSummary')
+  if (!gridEl) return
+
+  const myGroup = currentSession?.group
+
+  // ── Resumen por grupo (A, B, C, D) ──
+  if (summaryEl) {
+    const byGroup = { A: [], B: [], C: [], D: [] }
+    Object.entries(letrasRedesCache).forEach(([l, info]) => {
+      if (info.grupo && byGroup[info.grupo]) byGroup[info.grupo].push(l)
+    })
+    summaryEl.innerHTML = ['A', 'B', 'C', 'D'].map(g => {
+      const c = GRUPO_COLORS[g]
+      const letters = byGroup[g].sort().join(' · ') || '—'
+      return `
+        <div class="grupo-row" style="border-color:${c.border}">
+          <span class="grupo-tag-sm" style="background:${c.bg};color:${c.text}">Redes ${g}</span>
+          <span class="grupo-letras-sm">${letters}</span>
+        </div>`
+    }).join('')
+  }
+
+  // ── Grid de letras ──
+  gridEl.innerHTML = LETRAS.map(letra => {
+    const info        = letrasRedesCache[letra]
+    const completed   = info?.completada
+    const claimedBy   = info?.grupo
+    const isMine      = claimedBy === myGroup
+    const isOthers    = claimedBy && claimedBy !== myGroup
+    const canClick    = !completed && !isOthers && !!myGroup
+    const c           = claimedBy ? GRUPO_COLORS[claimedBy] : null
+    const count       = animeCountByLetra[letra] || 0
+
+    let bgStyle = ''
+    if (completed)   bgStyle = 'background:rgba(16,185,129,.18);border-color:rgba(16,185,129,.5);color:#10B981'
+    else if (c)      bgStyle = `background:${c.bg};border-color:${c.border};color:${c.text}`
+
+    const tooltip = completed
+      ? `${letra} — ✅ Completada (${count} animes)`
+      : claimedBy
+        ? `${letra} — Redes ${claimedBy} · ${count} animes${isMine ? ' (clic para liberar)' : ''}`
+        : `${letra} — ${count} animes · Clic para reclamar`
+
+    return `
+      <div class="letra-cell ${completed ? 'lc-done' : isMine ? 'lc-mine' : isOthers ? 'lc-others' : 'lc-free'}"
+           style="${bgStyle}"
+           onclick="${canClick ? `claimLetraRedes('${letra}')` : ''}"
            title="${tooltip}">
         <span class="letra-char">${completed ? '✓' : letra}</span>
         ${claimedBy && !completed ? `<span class="letra-badge">${claimedBy}</span>` : ''}
