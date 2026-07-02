@@ -962,10 +962,11 @@ function buildEpBlockRedes(ep) {
   const hlsUrl     = cache.hls?.url_video || ''
   const mp4SubUrl  = cache.mp4_sub?.url_video || ''
   const mp4EngUrl  = cache.mp4_eng?.url_video || ''
+  const previewUrl = ep.url_preview || ''
 
-  const inputs = [hlsUrl, mp4SubUrl, mp4EngUrl]
-  const filled = inputs.filter(url => url !== '').length
-  const total = 3
+  // Para UI (estado parcial/completo)
+  const filled = (hlsUrl ? 1 : 0) + (mp4SubUrl ? 1 : 0) + (mp4EngUrl ? 1 : 0) + (previewUrl ? 1 : 0)
+  const total  = 4
   
   // Estado del link: activo por defecto, caido si ya fue marcado así
   const isActivo   = ep.estado_links !== 'caido'
@@ -1065,6 +1066,21 @@ function buildEpBlockRedes(ep) {
                 oninput="markDirty(); onRedesInput(this)"
                 onchange="validateUrlInput(this)" />
             </div>
+
+            <!-- PREVIEW -->
+            <div class="server-field" style="border: 1px solid rgba(234, 76, 137, 0.4); background: rgba(234, 76, 137, 0.05);">
+              <div class="server-label">
+                <span class="sdot ${previewUrl ? 'filled' : ''}" id="dot_${ep.id_episodio}_preview"></span>
+                <span style="color:#ea4c89; font-weight:600;">Video Preview (Hover)</span>
+              </div>
+              <input type="url" class="input redes-in"
+                value="${escapeAttr(previewUrl)}"
+                placeholder="https://cdn.hentaila.pro/previews/..."
+                data-ep-id="${ep.id_episodio}"
+                data-type="preview"
+                oninput="markDirty(); onRedesInput(this)"
+                onchange="validateUrlInput(this)" />
+            </div>
           </div>
         </div>
 
@@ -1085,7 +1101,7 @@ function onRedesInput(input) {
   if (!block) return
   const inputs  = [...block.querySelectorAll('.redes-in')]
   const nFilled = inputs.filter(i => i.value.trim()).length
-  const nTotal  = 3
+  const nTotal  = 4
 
   // Considerar estado del link para el icono
   const activoBtn = document.getElementById(`btnActivo_${epId}`)
@@ -1130,7 +1146,7 @@ function setLinkStatus(epId, status, clickedBtn) {
   // Actualizar icono del episodio
   const inputs  = block ? [...block.querySelectorAll('.redes-in')] : []
   const nFilled = inputs.filter(i => i.value.trim()).length
-  const nTotal  = 3
+  const nTotal  = 4
   const isComplete = nFilled === nTotal && status === 'activo'
   const statEl  = document.getElementById(`epStat_${epId}`)
   if (statEl) {
@@ -1162,11 +1178,18 @@ async function saveRedes(silent = false) {
       const num    = block.dataset.num
       const inputs = [...block.querySelectorAll('.redes-in')]
       let allFilled = true
+      let previewVal = ''
 
       for (const input of inputs) {
-        let url    = input.value.trim()
-        const type   = input.dataset.type // 'hls', 'mp4_sub', 'mp4_eng'
+        const type   = input.dataset.type // 'hls', 'mp4_sub', 'mp4_eng', 'preview'
         const linkId = input.dataset.linkId ? parseInt(input.dataset.linkId) : null
+        let   url    = input.value.trim()
+
+        if (type === 'preview') {
+            previewVal = url
+            if (!url) { allFilled = false }
+            continue
+        }
         
         let servId, idioma, esDescarga
         
@@ -1227,7 +1250,10 @@ async function saveRedes(silent = false) {
       } else {
         estadoLinks = 'completado'
       }
-      await db.from('episodios').update({ estado_links: estadoLinks }).eq('id_episodio', epId)
+      await db.from('episodios').update({ 
+          estado_links: estadoLinks,
+          url_preview: previewVal 
+      }).eq('id_episodio', epId)
     }
 
     dirty = false
