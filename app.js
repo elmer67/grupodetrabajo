@@ -1376,7 +1376,7 @@ async function checkCompletadas() {
     const [{ count: total }, { count: done }] = await Promise.all([
       db.from('episodios').select('*', { count: 'exact', head: true }).in('id_anime', ids),
       db.from('episodios').select('*', { count: 'exact', head: true })
-        .in('id_anime', ids).eq('estado_experto', 'completado').eq('estado_links', 'completado')
+        .in('id_anime', ids).eq('estado_experto', 'completado')
     ])
 
     if (total && total > 0 && done === total) {
