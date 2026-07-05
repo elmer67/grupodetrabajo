@@ -671,8 +671,8 @@ async function createNewStudio() {
   const cleanName = nombre.trim()
   const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
   
-  const maxId = allStudios.reduce((max, s) => Math.max(max, parseInt(s.id_estudio) || 0), 204)
-  const nextId = maxId + 1
+  const { data: latestStudio } = await db.from('estudios').select('id_estudio').order('id_estudio', { ascending: false }).limit(1)
+  const nextId = (latestStudio && latestStudio.length > 0 ? parseInt(latestStudio[0].id_estudio) : 204) + 1
 
   const { data, error } = await db.from('estudios').insert([{ id_estudio: nextId, nombre: cleanName, slug }]).select()
   if (error) {
