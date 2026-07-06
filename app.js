@@ -38,7 +38,6 @@ const SESSIONS = {
   'osorior123':      { profile: 'redes', group: 'A', userName: 'Osorio' },
   'jeanfrancor123':  { profile: 'redes', group: 'B', userName: 'Jean Franco' },
   'kishr123':        { profile: 'redes', group: 'C', userName: 'Kish' },
-  'maurizio123':     { profile: 'redes', group: 'D', userName: 'Maurizio' },
   'andersonr123':    { profile: 'redes', group: 'B', userName: 'Anderson' },
 }
 
@@ -51,7 +50,7 @@ const GRUPO_COLORS = {
 }
 const GRUPO_MEMBERS = {
   'experto': { 'A': ['Hideki', 'Jean Franco'], 'B': ['Osorio', 'Ortiz', 'Anderson'], 'C': ['Kish'] },
-  'redes':   { 'A': ['Osorio'], 'B': ['Jean Franco', 'Anderson'], 'C': ['Kish'], 'D': ['Maurizio'] }
+  'redes':   { 'A': ['Osorio'], 'B': ['Jean Franco', 'Anderson'], 'C': ['Kish'] }
 }
 
 // ─────────────────────────────────────────────────────
