@@ -32,12 +32,14 @@ const SESSIONS = {
   'jeanfranco123':   { profile: 'experto', group: 'A', userName: 'Jean Franco' },
   'osorio123':       { profile: 'experto', group: 'B', userName: 'Osorio' },
   'ortiz123':        { profile: 'experto', group: 'B', userName: 'Ortiz' },
+  'anderson123':     { profile: 'experto', group: 'B', userName: 'Anderson' },
   'kish123':         { profile: 'experto', group: 'C', userName: 'Kish' },
   // ── REDES (individuales) ────────────────────────────
   'osorior123':      { profile: 'redes', group: 'A', userName: 'Osorio' },
   'jeanfrancor123':  { profile: 'redes', group: 'B', userName: 'Jean Franco' },
   'kishr123':        { profile: 'redes', group: 'C', userName: 'Kish' },
   'maurizio123':     { profile: 'redes', group: 'D', userName: 'Maurizio' },
+  'andersonr123':    { profile: 'redes', group: 'B', userName: 'Anderson' },
 }
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -48,8 +50,8 @@ const GRUPO_COLORS = {
   'D': { bg: 'rgba(16,185,129,.22)',  border: 'rgba(16,185,129,.55)',  text: '#34d399' }
 }
 const GRUPO_MEMBERS = {
-  'experto': { 'A': ['Hideki', 'Jean Franco'], 'B': ['Osorio', 'Ortiz'], 'C': ['Kish'] },
-  'redes':   { 'A': ['Osorio'], 'B': ['Jean Franco'], 'C': ['Kish'], 'D': ['Maurizio'] }
+  'experto': { 'A': ['Hideki', 'Jean Franco'], 'B': ['Osorio', 'Ortiz', 'Anderson'], 'C': ['Kish'] },
+  'redes':   { 'A': ['Osorio'], 'B': ['Jean Franco', 'Anderson'], 'C': ['Kish'], 'D': ['Maurizio'] }
 }
 
 // ─────────────────────────────────────────────────────
