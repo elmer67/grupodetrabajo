@@ -1377,11 +1377,13 @@ async function claimLetra(letra) {
 }
 
 async function checkCompletadas() {
+  // Verificar TODAS las letras asignadas (incluso las ya completadas)
+  // para detectar si se anadieron hentais nuevos que las desactualizaron
   const toCheck = Object.entries(letrasCache)
-    .filter(([, info]) => info.grupo && !info.completada)
+    .filter(([, info]) => info.grupo)
     .map(([l]) => l)
 
-  if (toCheck.length === 0) { showToast('No hay letras para verificar', 'info'); return }
+  if (toCheck.length === 0) { showToast('No hay letras asignadas para verificar', 'info'); return }
 
   showToast('Verificando letras...', 'info')
 
@@ -1396,6 +1398,7 @@ async function checkCompletadas() {
   })
 
   let newDone = 0
+  let newUndone = 0
   for (const letra of toCheck) {
     const ids = animesByLetra[letra] || []
     if (ids.length === 0) continue
@@ -1406,17 +1409,38 @@ async function checkCompletadas() {
         .in('id_anime', ids).eq('estado_experto', 'completado')
     ])
 
-    if (total && total > 0 && done === total) {
+    const isNowComplete = total && total > 0 && done === total
+    const wasComplete   = letrasCache[letra].completada
+
+    if (isNowComplete && !wasComplete) {
+      // Nueva letra completada ✅
       await db.from('asignaciones_letras').update({ completada: true }).eq('letra', letra)
       letrasCache[letra].completada = true
       newDone++
+    } else if (!isNowComplete && wasComplete) {
+      // Letra que ahora tiene hentais nuevos sin procesar — desmarcar ⚠️
+      await db.from('asignaciones_letras').update({ completada: false }).eq('letra', letra)
+      letrasCache[letra].completada = false
+      newUndone++
     }
   }
 
-  showToast(
-    newDone > 0 ? `¡${newDone} letra${newDone > 1 ? 's' : ''} completada${newDone > 1 ? 's' : ''}! 🎉` : 'Ninguna completada aún',
-    newDone > 0 ? 'success' : 'info'
-  )
+  let msg, type
+  if (newDone > 0 && newUndone > 0) {
+    msg  = `¡${newDone} completada${newDone > 1 ? 's' : ''}! ⚠️ ${newUndone} desactualizada${newUndone > 1 ? 's' : ''} por hentais nuevos`
+    type = 'warning'
+  } else if (newDone > 0) {
+    msg  = `¡${newDone} letra${newDone > 1 ? 's' : ''} completada${newDone > 1 ? 's' : ''}! 🎉`
+    type = 'success'
+  } else if (newUndone > 0) {
+    msg  = `⚠️ ${newUndone} letra${newUndone > 1 ? 's' : ''} desactualizad${newUndone > 1 ? 'as' : 'a'} — tienen hentais nuevos sin procesar`
+    type = 'warning'
+  } else {
+    msg  = 'Todo está al día ✅'
+    type = 'success'
+  }
+
+  showToast(msg, type)
   renderLetrasGrid()
 }
 
