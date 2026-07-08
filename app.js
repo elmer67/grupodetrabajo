@@ -1429,11 +1429,11 @@ function renderLetrasGrid() {
 
   // ── Resumen por grupo ──
   if (summaryEl) {
-    const byGroup = { A: [], B: [], C: [] }
+    const byGroup = { A: [], B: [], C: [], D: [] }
     Object.entries(letrasCache).forEach(([l, info]) => {
       if (info.grupo && byGroup[info.grupo]) byGroup[info.grupo].push(l)
     })
-    summaryEl.innerHTML = ['A', 'B', 'C'].map(g => {
+    summaryEl.innerHTML = ['A', 'B', 'C', 'D'].map(g => {
       const c = GRUPO_COLORS[g]
       const letters = byGroup[g].sort().join(' · ') || '—'
       return `
