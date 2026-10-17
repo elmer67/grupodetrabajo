@@ -903,6 +903,7 @@ async function saveExperto(silent = false) {
     document.getElementById('unsavedBanner')?.remove()
 
     dirty = false
+    triggerSiteRevalidate(currentAnime?.slug)
     if (!silent) {
       showToast('¡Guardado correctamente! 💾', 'success')
       await loadStats()
@@ -1258,6 +1259,7 @@ async function saveRedes(silent = false) {
     }
 
     dirty = false
+    triggerSiteRevalidate(currentAnime?.slug)
     if (!silent) {
       showToast('¡Links guardados! ✅', 'success')
       await loadStats()
@@ -1739,6 +1741,7 @@ async function createAnime() {
 
   closeModal()
   closeDropdown()
+  triggerSiteRevalidate(slug)
   showToast(`Anime "${titulo}" creado ✅`, 'success')
   await selectAnime(data.id_anime)
   await loadStats()
@@ -1757,6 +1760,13 @@ async function autoSave() {
 // ─────────────────────────────────────────────────────
 //  UTILIDADES
 // ─────────────────────────────────────────────────────
+function triggerSiteRevalidate(slug) {
+  try {
+    const base = 'https://www.hentaila.pro/api/revalidate?secret=hentaila_purge_secret_2026'
+    const url = slug ? `${base}&slug=${encodeURIComponent(slug)}` : base
+    fetch(url, { method: 'GET' }).catch(() => {})
+  } catch (e) {}
+}
 function deriveDownloadLink(serverName, embedUrl) {
   if (!embedUrl) return '';
   const url = embedUrl.trim();
