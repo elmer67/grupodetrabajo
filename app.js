@@ -163,6 +163,10 @@ function applySession() {
     ui.style.display = 'flex'
   }
 
+  // Botón "Enviar Anuncio Push" — exclusivo del equipo de Redes
+  const pushBtn = document.getElementById('pushOpenBtn')
+  if (pushBtn) pushBtn.style.display = currentProfile === 'redes' ? 'inline-flex' : 'none'
+
   // Botón salir visible
   const lb = document.getElementById('logoutBtn')
   if (lb) lb.style.display = 'inline-flex'
@@ -1852,3 +1856,251 @@ function setText(id, val) {
 
 
 
+
+// ─────────────────────────────────────────────────────
+//  ANUNCIOS PUSH (solo perfil Redes)
+//  Dispara /api/push/send de hentaila.pro → llega a todos los dispositivos con notificaciones activas
+// ─────────────────────────────────────────────────────
+const PUSH_API_URL    = 'https://www.hentaila.pro/api/push/send'
+const PUSH_SECRET     = 'hentaila_purge_secret_2026'   // mismo secreto que /api/revalidate
+const PUSH_TITLE_EP   = '¡Nuevo episodio disponible!'
+
+let pushPreset       = 'episodio'   // 'episodio' | 'custom'
+let pushAnime        = null         // { id_anime, titulo, slug, url_portada }
+let pushEpisodes     = []           // episodios del anime elegido
+let pushImage        = ''           // URL absoluta de la miniatura
+let pushSearchTimer  = null
+let pushSending      = false
+
+// Convierte la ruta de BD a URL absoluta (con la llave ?2026 que usa el CDN en hentaila-pro)
+function pushImgUrl(dbPath) {
+  const base = imgPath(dbPath)
+  if (!base) return ''
+  return base + (base.includes('?') ? '&' : '?') + '2026'
+}
+
+function openPushModal() {
+  if (currentProfile !== 'redes') return
+  document.getElementById('pushOverlay').style.display = 'flex'
+  resetPushForm()
+  setPushPreset('episodio')
+  // Si ya hay un anime abierto en pantalla, se carga automáticamente
+  if (currentAnime) selectPushAnime(currentAnime)
+}
+
+function closePushModal() {
+  document.getElementById('pushOverlay').style.display = 'none'
+}
+
+function handlePushOverlayClick(e) {
+  if (e.target === document.getElementById('pushOverlay')) closePushModal()
+}
+
+function resetPushForm() {
+  pushAnime = null
+  pushEpisodes = []
+  pushImage = ''
+  document.getElementById('pushAnimeSearch').value = ''
+  document.getElementById('pushAnimeResults').style.display = 'none'
+  const sel = document.getElementById('pushEpisodeSelect')
+  sel.innerHTML = '<option value="">— Primero selecciona un anime —</option>'
+  sel.disabled = true
+  document.getElementById('pushTitle').value = ''
+  document.getElementById('pushMessage').value = ''
+  document.getElementById('pushUrl').value = ''
+  renderPushPreview()
+}
+
+function setPushPreset(preset) {
+  pushPreset = preset
+  document.getElementById('pushPresetEp').classList.toggle('active', preset === 'episodio')
+  document.getElementById('pushPresetCustom').classList.toggle('active', preset === 'custom')
+  document.getElementById('pushEpisodioBox').style.display = preset === 'episodio' ? 'block' : 'none'
+
+  if (preset === 'episodio') {
+    // Rellenar con el episodio elegido (si lo hay)
+    onPushEpisodeChange()
+  } else {
+    pushImage = ''
+    document.getElementById('pushTitle').value = ''
+    document.getElementById('pushMessage').value = ''
+    document.getElementById('pushUrl').value = '/'
+    renderPushPreview()
+  }
+}
+
+// Buscador de anime dentro del modal
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('pushAnimeSearch')
+  if (!input) return
+  input.addEventListener('input', () => {
+    clearTimeout(pushSearchTimer)
+    const q = input.value.trim()
+    const box = document.getElementById('pushAnimeResults')
+    if (q.length < 2) { box.style.display = 'none'; return }
+    pushSearchTimer = setTimeout(() => searchPushAnimes(q), 250)
+  })
+  document.addEventListener('click', e => {
+    const box = document.getElementById('pushAnimeResults')
+    if (box && !e.target.closest('.push-search-wrap')) box.style.display = 'none'
+  })
+})
+
+async function searchPushAnimes(q) {
+  const box = document.getElementById('pushAnimeResults')
+  const { data, error } = await db
+    .from('animes')
+    .select('id_anime, titulo, slug, url_portada')
+    .ilike('titulo', `%${q}%`)
+    .order('titulo')
+    .limit(8)
+  if (error) { showToast('Error buscando anime: ' + error.message, 'error'); return }
+
+  if (!data || data.length === 0) {
+    box.innerHTML = '<div class="push-result-empty">Sin resultados</div>'
+    box.style.display = 'block'
+    return
+  }
+  box.innerHTML = data.map(a => `
+    <div class="push-result-item" data-id="${a.id_anime}">
+      ${a.url_portada ? `<img src="${escapeAttr(imgPath(a.url_portada))}" alt="" onerror="this.style.display='none'">` : ''}
+      <span>${escapeHtml(a.titulo)}</span>
+    </div>`).join('')
+  box.style.display = 'block'
+  box.querySelectorAll('.push-result-item').forEach((el, i) => {
+    el.addEventListener('click', () => selectPushAnime(data[i]))
+  })
+}
+
+async function selectPushAnime(anime) {
+  pushAnime = anime
+  document.getElementById('pushAnimeSearch').value = anime.titulo
+  document.getElementById('pushAnimeResults').style.display = 'none'
+
+  const sel = document.getElementById('pushEpisodeSelect')
+  sel.disabled = true
+  sel.innerHTML = '<option value="">Cargando episodios...</option>'
+
+  const { data: eps, error } = await db
+    .from('episodios')
+    .select('id_episodio, numero, titulo_episodio, thumb')
+    .eq('id_anime', anime.id_anime)
+    .order('numero', { ascending: false })
+  if (error) { showToast('Error cargando episodios: ' + error.message, 'error'); return }
+
+  pushEpisodes = eps || []
+  if (pushEpisodes.length === 0) {
+    sel.innerHTML = '<option value="">Este anime no tiene episodios</option>'
+    return
+  }
+  sel.innerHTML = pushEpisodes
+    .map(e => `<option value="${e.id_episodio}">Episodio ${e.numero}</option>`)
+    .join('')
+  sel.disabled = false
+  // El más reciente queda seleccionado por defecto → se autorrellena todo
+  onPushEpisodeChange()
+}
+
+// Autorrelleno del preset "Nuevo Episodio"
+function onPushEpisodeChange() {
+  if (pushPreset !== 'episodio') return
+  const sel = document.getElementById('pushEpisodeSelect')
+  const ep = pushEpisodes.find(e => String(e.id_episodio) === sel.value)
+
+  if (!pushAnime || !ep) {
+    pushImage = ''
+    document.getElementById('pushTitle').value = ''
+    document.getElementById('pushMessage').value = ''
+    document.getElementById('pushUrl').value = ''
+    renderPushPreview()
+    return
+  }
+
+  document.getElementById('pushTitle').value   = PUSH_TITLE_EP
+  document.getElementById('pushMessage').value = `${pushAnime.titulo} — Episodio ${ep.numero}`
+  document.getElementById('pushUrl').value     = `/ver/${pushAnime.slug}-${ep.numero}`
+  pushImage = pushImgUrl(ep.thumb || pushAnime.url_portada)
+  renderPushPreview()
+}
+
+// Vista previa idéntica a la tarjeta de la bandeja de /notificaciones
+function renderPushPreview() {
+  const box     = document.getElementById('pushPreview')
+  if (!box) return
+  const title   = document.getElementById('pushTitle').value.trim()
+  const message = document.getElementById('pushMessage').value.trim()
+  const ep      = pushEpisodes.find(e => String(e.id_episodio) === document.getElementById('pushEpisodeSelect').value)
+  const badge   = pushPreset === 'episodio' && ep ? `Episodio ${ep.numero}` : 'Anuncio'
+
+  if (!title && !message) {
+    box.innerHTML = '<div class="push-preview-empty">Completa los campos para ver cómo le llegará a los usuarios</div>'
+    return
+  }
+
+  box.innerHTML = `
+    <div class="pv-card">
+      <div class="pv-top">
+        <div class="pv-thumb">${pushImage ? `<img src="${escapeAttr(pushImage)}" alt="" onerror="this.style.display='none'">` : '🔔'}</div>
+        <div class="pv-meta">
+          <span class="pv-badge">${escapeHtml(badge)}</span>
+          <span class="pv-time">ahora</span>
+        </div>
+      </div>
+      <div class="pv-name">${escapeHtml(message || '—')}</div>
+      <div class="pv-bottom">
+        <span class="pv-sub">${escapeHtml(title || '—')}</span>
+        <span class="pv-ver">Ver →</span>
+      </div>
+    </div>`
+}
+
+async function sendPushAnnouncement() {
+  if (pushSending) return
+  const title   = document.getElementById('pushTitle').value.trim()
+  const message = document.getElementById('pushMessage').value.trim()
+  let   url     = document.getElementById('pushUrl').value.trim() || '/'
+
+  if (pushPreset === 'episodio' && (!pushAnime || !document.getElementById('pushEpisodeSelect').value)) {
+    showToast('Selecciona el anime y el episodio', 'error'); return
+  }
+  if (!title)   { showToast('El título es obligatorio', 'error'); return }
+  if (!message) { showToast('El mensaje es obligatorio', 'error'); return }
+  if (!url.startsWith('/') && !/^https?:\/\//.test(url)) url = '/' + url
+
+  if (!confirm(`¿Enviar este anuncio a TODOS los dispositivos con notificaciones activadas?\n\n${title}\n${message}`)) return
+
+  const btn = document.getElementById('pushSendBtn')
+  pushSending = true
+  btn.disabled = true
+  btn.textContent = 'Enviando...'
+
+  try {
+    const res = await fetch(PUSH_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        message,
+        url,
+        image: pushPreset === 'episodio' ? (pushImage || null) : null,
+        secret: PUSH_SECRET
+      })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+
+    if (!data.total) {
+      showToast('No hay dispositivos con notificaciones activas todavía', 'info')
+    } else {
+      showToast(`¡Anuncio enviado! ✅ ${data.sent} de ${data.total} dispositivos`, 'success')
+    }
+    closePushModal()
+  } catch (err) {
+    showToast('No se pudo enviar el anuncio: ' + err.message, 'error')
+    console.error(err)
+  } finally {
+    pushSending = false
+    btn.disabled = false
+    btn.textContent = '🚀 Enviar a todos los dispositivos'
+  }
+}

@@ -1293,3 +1293,86 @@ a { color: inherit; text-decoration: none; }
   border-color: rgba(239, 68, 68, 0.5);
   color: #ef4444;
 }
+
+
+/* ═══════════════ ANUNCIOS PUSH (Redes) ═══════════════ */
+.push-open-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: linear-gradient(135deg, #EA4C89 0%, #d6336c 100%);
+  color: #fff; border: none; border-radius: 9px;
+  padding: 8px 14px; font-size: 12px; font-weight: 700;
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+  box-shadow: 0 3px 14px rgba(234, 76, 137, 0.35);
+  transition: transform .15s ease, box-shadow .2s ease;
+}
+.push-open-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 20px rgba(234, 76, 137, 0.55); }
+
+.push-modal { max-width: 520px; max-height: 92vh; overflow-y: auto; }
+.push-hint { margin: 0 0 14px; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.push-hint strong { color: var(--text); }
+
+.push-presets { display: flex; gap: 8px; margin-bottom: 14px; }
+.push-preset-btn {
+  flex: 1; padding: 9px 10px; border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  background: var(--bg-elevated); color: var(--text-muted);
+  border: 1px solid var(--border); transition: all .15s ease;
+}
+.push-preset-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.push-preset-btn.active {
+  background: rgba(234, 76, 137, 0.16); color: #f472b6;
+  border-color: rgba(234, 76, 137, 0.55);
+}
+
+.push-search-wrap { position: relative; }
+.push-search-results {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+  background: var(--bg-card); border: 1px solid var(--border-hover);
+  border-radius: 10px; max-height: 240px; overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+.push-result-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border);
+}
+.push-result-item:last-child { border-bottom: none; }
+.push-result-item:hover { background: var(--bg-elevated); }
+.push-result-item img { width: 28px; height: 38px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.push-result-empty { padding: 12px; font-size: 12px; color: var(--text-muted); text-align: center; }
+
+.push-preview-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-dim); margin: 4px 0 8px;
+}
+.push-preview { margin-bottom: 16px; }
+.push-preview-empty {
+  padding: 18px; text-align: center; font-size: 12px; color: var(--text-dim);
+  border: 1px dashed var(--border); border-radius: 12px;
+}
+
+/* Tarjeta idéntica a la bandeja de /notificaciones de la app */
+.pv-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px;
+  background: #12121c; border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 14px;
+}
+.pv-top { display: flex; align-items: center; gap: 12px; }
+.pv-thumb {
+  width: 128px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; flex-shrink: 0;
+  background: #0b0b12; border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+.pv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pv-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.pv-badge {
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  background: rgba(234, 76, 137, 0.18); color: #EA4C89; border: 1px solid rgba(234, 76, 137, 0.35);
+}
+.pv-time { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
+.pv-name {
+  font-size: 14px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pv-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pv-sub { font-size: 12px; color: rgba(255, 255, 255, 0.52); }
+.pv-ver { font-size: 13px; font-weight: 800; color: #EA4C89; white-space: nowrap; }

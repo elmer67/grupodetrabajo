@@ -77,6 +77,7 @@
             <span class="hstat-val" id="hStatPendRed">—</span>
           </div>
         </div>
+        <button class="push-open-btn" id="pushOpenBtn" onclick="openPushModal()" style="display:none" title="Enviar anuncio a todos los dispositivos con notificaciones activas">🔔 Enviar Anuncio Push</button>
         <div class="user-indicator" id="userIndicator" style="display:none"></div>
         <button class="logout-btn" id="logoutBtn" onclick="doLogout()" style="display:none" title="Cerrar sesión">↪ Salir</button>
       </div>
@@ -225,6 +226,59 @@
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
         <button class="btn-primary" onclick="createAnime()">Crear Anime</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ MODAL ANUNCIO PUSH (solo Redes) ══════════════ -->
+  <div class="modal-overlay" id="pushOverlay" style="display:none" onclick="handlePushOverlayClick(event)">
+    <div class="modal push-modal" id="pushModalBox">
+      <div class="modal-title">🔔 Enviar Anuncio Push</div>
+      <p class="push-hint">Le llegará a <strong>todos los dispositivos con las notificaciones activadas</strong> (Android e iPhone).</p>
+
+      <div class="push-presets">
+        <button type="button" class="push-preset-btn active" id="pushPresetEp" onclick="setPushPreset('episodio')">🎬 Nuevo Episodio</button>
+        <button type="button" class="push-preset-btn" id="pushPresetCustom" onclick="setPushPreset('custom')">✏️ Anuncio libre</button>
+      </div>
+
+      <!-- Preset: Nuevo Episodio -->
+      <div id="pushEpisodioBox">
+        <div class="form-group">
+          <label for="pushAnimeSearch">Anime</label>
+          <div class="push-search-wrap">
+            <input type="text" id="pushAnimeSearch" class="input" placeholder="Escribe el nombre del anime..." autocomplete="off" />
+            <div class="push-search-results" id="pushAnimeResults" style="display:none"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="pushEpisodeSelect">Episodio</label>
+          <select id="pushEpisodeSelect" class="input" onchange="onPushEpisodeChange()" disabled>
+            <option value="">— Primero selecciona un anime —</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Campos (autorrellenados por el preset, editables) -->
+      <div class="form-group">
+        <label for="pushTitle">Título</label>
+        <input type="text" id="pushTitle" class="input" maxlength="60" oninput="renderPushPreview()" />
+      </div>
+      <div class="form-group">
+        <label for="pushMessage">Mensaje</label>
+        <input type="text" id="pushMessage" class="input" maxlength="140" oninput="renderPushPreview()" />
+      </div>
+      <div class="form-group">
+        <label for="pushUrl">Enlace al tocar la notificación</label>
+        <input type="text" id="pushUrl" class="input" placeholder="/ver/anime-1" oninput="renderPushPreview()" />
+      </div>
+
+      <!-- Vista previa -->
+      <div class="push-preview-label">Vista previa</div>
+      <div class="push-preview" id="pushPreview"></div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closePushModal()">Cancelar</button>
+        <button class="btn-primary" id="pushSendBtn" onclick="sendPushAnnouncement()">🚀 Enviar a todos los dispositivos</button>
       </div>
     </div>
   </div>
