@@ -2040,23 +2040,22 @@ function renderPushPreview() {
     return
   }
 
-  const hasImg = includeImg && Boolean(pushImage)
-  const thumbHtml = hasImg
+  const thumbHtml = pushImage
     ? `<img src="${escapeAttr(pushImage)}" alt="" onerror="this.style.display='none'">`
-    : `<div style="font-size:11px; font-weight:700; color:#EA4C89; text-align:center; padding:4px; line-height:1.2;">🔔<br>Modo Discreto</div>`
+    : `🔔`
 
   box.innerHTML = `
     <div class="pv-card">
       <div class="pv-top">
         <div class="pv-thumb">${thumbHtml}</div>
         <div class="pv-meta">
-          <div style="display:flex; align-items:center; gap:6px;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="pv-badge">${escapeHtml(badge)}</span>
-            <span style="font-size:10px; font-weight:600; padding:2px 6px; border-radius:4px; background:${hasImg ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)'}; color:${hasImg ? '#f87171' : '#34d399'};">
-              ${hasImg ? '🖼️ Con imagen' : '🔒 Sin imagen (Discreto)'}
+            <span style="font-size:10px; font-weight:600; padding:2px 6px; border-radius:4px; background:${includeImg ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)'}; color:${includeImg ? '#f87171' : '#34d399'};">
+              ${includeImg ? '🖼️ Banner activado en alerta' : '🔒 Alerta externa discreta'}
             </span>
           </div>
-          <span class="pv-time">ahora</span>
+          <span class="pv-time">ahora · En app se verá con miniatura</span>
         </div>
       </div>
       <div class="pv-name">${escapeHtml(message || '—')}</div>
@@ -2081,10 +2080,10 @@ async function sendPushAnnouncement() {
   if (!url.startsWith('/') && !/^https?:\/\//.test(url)) url = '/' + url
 
   const includeImg = document.getElementById('pushIncludeImage')?.checked || false
-  const finalImage = (includeImg && pushPreset === 'episodio') ? (pushImage || null) : null
-  const alertModeText = finalImage ? 'con imagen / banner grande 🖼️' : 'modo DISCRETO (sin imagen en pantalla) 🔒'
+  const epImage = pushPreset === 'episodio' ? (pushImage || null) : null
+  const alertModeText = includeImg ? 'con imagen / banner grande 🖼️' : 'modo DISCRETO (sin imagen en pantalla) 🔒'
 
-  if (!confirm(`¿Enviar este anuncio a TODOS los dispositivos con notificaciones activadas?\n\nModo: ${alertModeText}\n\nTítulo: ${title}\nMensaje: ${message}`)) return
+  if (!confirm(`¿Enviar este anuncio a TODOS los dispositivos con notificaciones activadas?\n\nAlerta emergente: ${alertModeText}\nBandeja en la app: con miniatura\n\nTítulo: ${title}\nMensaje: ${message}`)) return
 
   const btn = document.getElementById('pushSendBtn')
   pushSending = true
@@ -2099,7 +2098,8 @@ async function sendPushAnnouncement() {
         title,
         message,
         url,
-        image: finalImage,
+        image: epImage,
+        showImageInAlert: includeImg,
         secret: PUSH_SECRET
       })
     })
