@@ -2081,6 +2081,7 @@ async function sendPushAnnouncement() {
 
   const includeImg = document.getElementById('pushIncludeImage')?.checked || false
   const epImage = pushPreset === 'episodio' ? (pushImage || null) : null
+  const badge = pushPreset === 'episodio' && ep ? `Episodio ${ep.numero}` : 'Estreno'
   const alertModeText = includeImg ? 'con imagen / banner grande 🖼️' : 'modo DISCRETO (sin imagen en pantalla) 🔒'
 
   if (!confirm(`¿Enviar este anuncio a TODOS los dispositivos con notificaciones activadas?\n\nAlerta emergente: ${alertModeText}\nBandeja en la app: con miniatura\n\nTítulo: ${title}\nMensaje: ${message}`)) return
@@ -2100,6 +2101,7 @@ async function sendPushAnnouncement() {
         url,
         thumb: epImage,
         image: includeImg ? epImage : null,
+        badge,
         secret: PUSH_SECRET
       })
     })
