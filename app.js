@@ -2098,8 +2098,8 @@ async function sendPushAnnouncement() {
         title,
         message,
         url,
-        image: epImage,
-        showImageInAlert: includeImg,
+        thumb: epImage,
+        image: includeImg ? epImage : null,
         secret: PUSH_SECRET
       })
     })
