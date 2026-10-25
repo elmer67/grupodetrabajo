@@ -1908,6 +1908,8 @@ function resetPushForm() {
   document.getElementById('pushTitle').value = ''
   document.getElementById('pushMessage').value = ''
   document.getElementById('pushUrl').value = ''
+  const chk = document.getElementById('pushIncludeImage')
+  if (chk) chk.checked = false
   renderPushPreview()
 }
 
@@ -2031,18 +2033,29 @@ function renderPushPreview() {
   const message = document.getElementById('pushMessage').value.trim()
   const ep      = pushEpisodes.find(e => String(e.id_episodio) === document.getElementById('pushEpisodeSelect').value)
   const badge   = pushPreset === 'episodio' && ep ? `Episodio ${ep.numero}` : 'Anuncio'
+  const includeImg = document.getElementById('pushIncludeImage')?.checked || false
 
   if (!title && !message) {
     box.innerHTML = '<div class="push-preview-empty">Completa los campos para ver cómo le llegará a los usuarios</div>'
     return
   }
 
+  const hasImg = includeImg && Boolean(pushImage)
+  const thumbHtml = hasImg
+    ? `<img src="${escapeAttr(pushImage)}" alt="" onerror="this.style.display='none'">`
+    : `<div style="font-size:11px; font-weight:700; color:#EA4C89; text-align:center; padding:4px; line-height:1.2;">🔔<br>Modo Discreto</div>`
+
   box.innerHTML = `
     <div class="pv-card">
       <div class="pv-top">
-        <div class="pv-thumb">${pushImage ? `<img src="${escapeAttr(pushImage)}" alt="" onerror="this.style.display='none'">` : '🔔'}</div>
+        <div class="pv-thumb">${thumbHtml}</div>
         <div class="pv-meta">
-          <span class="pv-badge">${escapeHtml(badge)}</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="pv-badge">${escapeHtml(badge)}</span>
+            <span style="font-size:10px; font-weight:600; padding:2px 6px; border-radius:4px; background:${hasImg ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)'}; color:${hasImg ? '#f87171' : '#34d399'};">
+              ${hasImg ? '🖼️ Con imagen' : '🔒 Sin imagen (Discreto)'}
+            </span>
+          </div>
           <span class="pv-time">ahora</span>
         </div>
       </div>
@@ -2067,7 +2080,11 @@ async function sendPushAnnouncement() {
   if (!message) { showToast('El mensaje es obligatorio', 'error'); return }
   if (!url.startsWith('/') && !/^https?:\/\//.test(url)) url = '/' + url
 
-  if (!confirm(`¿Enviar este anuncio a TODOS los dispositivos con notificaciones activadas?\n\n${title}\n${message}`)) return
+  const includeImg = document.getElementById('pushIncludeImage')?.checked || false
+  const finalImage = (includeImg && pushPreset === 'episodio') ? (pushImage || null) : null
+  const alertModeText = finalImage ? 'con imagen / banner grande 🖼️' : 'modo DISCRETO (sin imagen en pantalla) 🔒'
+
+  if (!confirm(`¿Enviar este anuncio a TODOS los dispositivos con notificaciones activadas?\n\nModo: ${alertModeText}\n\nTítulo: ${title}\nMensaje: ${message}`)) return
 
   const btn = document.getElementById('pushSendBtn')
   pushSending = true
@@ -2082,7 +2099,7 @@ async function sendPushAnnouncement() {
         title,
         message,
         url,
-        image: pushPreset === 'episodio' ? (pushImage || null) : null,
+        image: finalImage,
         secret: PUSH_SECRET
       })
     })
@@ -2092,7 +2109,7 @@ async function sendPushAnnouncement() {
     if (!data.total) {
       showToast('No hay dispositivos con notificaciones activas todavía', 'info')
     } else {
-      showToast(`¡Anuncio enviado! ✅ ${data.sent} de ${data.total} dispositivos`, 'success')
+      showToast(`¡Anuncio enviado (${alertModeText})! ✅ ${data.sent} de ${data.total} dispositivos`, 'success')
     }
     closePushModal()
   } catch (err) {

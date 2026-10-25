@@ -272,6 +272,18 @@
         <input type="text" id="pushUrl" class="input" placeholder="/ver/anime-1" oninput="renderPushPreview()" />
       </div>
 
+      <!-- Opción: Incluir captura / imagen grande -->
+      <div class="form-group push-toggle-group">
+        <label class="push-toggle-label" for="pushIncludeImage">
+          <input type="checkbox" id="pushIncludeImage" onchange="renderPushPreview()" />
+          <span class="push-toggle-switch"></span>
+          <span class="push-toggle-info">
+            <span class="push-toggle-title">🖼️ Incluir captura / imagen en la alerta</span>
+            <span class="push-toggle-desc">Desactivado por defecto. Actívalo solo si deseas mostrar el banner grande en la pantalla del usuario.</span>
+          </span>
+        </label>
+      </div>
+
       <!-- Vista previa -->
       <div class="push-preview-label">Vista previa</div>
       <div class="push-preview" id="pushPreview"></div>

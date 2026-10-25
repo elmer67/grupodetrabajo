@@ -1376,3 +1376,76 @@ a { color: inherit; text-decoration: none; }
 .pv-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .pv-sub { font-size: 12px; color: rgba(255, 255, 255, 0.52); }
 .pv-ver { font-size: 13px; font-weight: 800; color: #EA4C89; white-space: nowrap; }
+
+/* ─── Toggle Switch para Incluir Imagen en Push ─── */
+.push-toggle-group {
+  margin: 14px 0 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  transition: border-color .15s ease, background .15s ease;
+}
+.push-toggle-group:has(input:checked) {
+  border-color: rgba(234, 76, 137, 0.45);
+  background: rgba(234, 76, 137, 0.05);
+}
+.push-toggle-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.push-toggle-label input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.push-toggle-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  background: var(--border);
+  border-radius: 999px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: background .2s ease;
+}
+.push-toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.push-toggle-label input:checked + .push-toggle-switch {
+  background: #EA4C89;
+}
+.push-toggle-label input:checked + .push-toggle-switch::after {
+  transform: translateX(16px);
+}
+.push-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.push-toggle-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.push-toggle-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
