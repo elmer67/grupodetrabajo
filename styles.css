@@ -1449,3 +1449,301 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-muted);
   line-height: 1.35;
 }
+
+/* ═══════════════ BANDEJA DE FEEDBACK ═══════════════ */
+.feedback-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #38bdf8;
+  border-radius: 9px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.2s ease;
+}
+.feedback-open-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(56, 189, 248, 0.22);
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.28);
+}
+
+.feedback-dash-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.16) 0%, rgba(234, 76, 137, 0.16) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #e0f2fe;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.feedback-dash-btn:hover {
+  border-color: #38bdf8;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.24) 0%, rgba(234, 76, 137, 0.24) 100%);
+  transform: translateY(-1px);
+}
+
+.feedback-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #EA4C89;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.feedback-modal {
+  width: 720px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.feedback-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.feedback-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.feedback-filter-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.feedback-filter-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.feedback-filter-btn.active {
+  background: rgba(234, 76, 137, 0.18);
+  border-color: rgba(234, 76, 137, 0.55);
+  color: #f472b6;
+}
+
+.feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 65vh;
+  padding-right: 4px;
+}
+
+.fb-card-item {
+  background: #141220;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s ease;
+}
+.fb-card-item:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.fb-card-done {
+  opacity: 0.72;
+}
+
+.fb-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fb-badges-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.fb-tag {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.fb-tag-error {
+  background: rgba(239, 68, 68, 0.16);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.fb-tag-comment {
+  background: rgba(56, 189, 248, 0.16);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+.fb-tag-idea {
+  background: rgba(168, 85, 247, 0.16);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+.fb-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.fb-status-pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.fb-status-done {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.fb-date {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.fb-author-row {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.fb-author-row strong {
+  color: var(--text);
+}
+
+.fb-message {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fb-item-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.fb-meta-label {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.fb-meta-link {
+  color: #38bdf8;
+  text-decoration: none;
+  word-break: break-all;
+}
+.fb-meta-link:hover {
+  text-decoration: underline;
+}
+
+.fb-screenshot-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.fb-screenshot-img {
+  max-width: 240px;
+  max-height: 140px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  object-fit: cover;
+  transition: transform 0.15s ease;
+}
+.fb-screenshot-img:hover {
+  transform: scale(1.02);
+}
+.fb-screenshot-hint {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.fb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+.fb-action-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 7px;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.fb-action-btn:hover {
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+.fb-action-btn--resolve {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+.fb-action-btn--resolve:hover {
+  background: rgba(16, 185, 129, 0.24);
+  color: #6ee7b7;
+}
+.fb-action-btn--delete {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.32);
+  color: #f87171;
+}
+.fb-action-btn--delete:hover {
+  background: rgba(239, 68, 68, 0.22);
+  color: #fca5a5;
+}

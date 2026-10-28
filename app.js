@@ -163,6 +163,14 @@ function applySession() {
     ui.style.display = 'flex'
   }
 
+  // Botón "Ver todo el Feedback" — visible para ambos equipos (Experto y Redes)
+  const fbBtn = document.getElementById('feedbackOpenBtn')
+  if (fbBtn) fbBtn.style.display = 'inline-flex'
+  setTimeout(() => fetchFeedbackList(true), 300)
+  if (!window.__hlFeedbackPoller) {
+    window.__hlFeedbackPoller = setInterval(() => fetchFeedbackList(true), 60_000)
+  }
+
   // Botón "Enviar Anuncio Push" — exclusivo del equipo de Redes
   const pushBtn = document.getElementById('pushOpenBtn')
   if (pushBtn) pushBtn.style.display = currentProfile === 'redes' ? 'inline-flex' : 'none'
@@ -2121,5 +2129,230 @@ async function sendPushAnnouncement() {
     pushSending = false
     btn.disabled = false
     btn.textContent = '🚀 Enviar a todos los dispositivos'
+  }
+}
+
+// ─────────────────────────────────────────────────────
+//  BANDEJA DE FEEDBACK Y REPORTES (hentaila.pro/feedback)
+// ─────────────────────────────────────────────────────
+const FEEDBACK_API_URL = 'https://www.hentaila.pro/api/feedback'
+let feedbackItems = []
+let currentFeedbackFilter = 'all'
+
+function updateFeedbackBadges(pendingCount) {
+  const b1 = document.getElementById('feedbackHeaderBadge')
+  const b2 = document.getElementById('feedbackDashBadge')
+  const count = Number(pendingCount) || 0
+  ;[b1, b2].forEach(el => {
+    if (!el) return
+    if (count > 0) {
+      el.textContent = String(count)
+      el.style.display = 'inline-flex'
+    } else {
+      el.style.display = 'none'
+    }
+  })
+}
+
+async function openFeedbackModal() {
+  const overlay = document.getElementById('feedbackOverlay')
+  if (overlay) overlay.style.display = 'flex'
+  await fetchFeedbackList(false)
+}
+
+function closeFeedbackModal() {
+  const overlay = document.getElementById('feedbackOverlay')
+  if (overlay) overlay.style.display = 'none'
+}
+
+function handleFeedbackOverlayClick(e) {
+  if (e.target === document.getElementById('feedbackOverlay')) closeFeedbackModal()
+}
+
+function setFeedbackFilter(filter) {
+  currentFeedbackFilter = filter
+  const container = document.getElementById('feedbackFilters')
+  if (container) {
+    container.querySelectorAll('.feedback-filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-filter') === filter)
+    })
+  }
+  renderFeedbackList()
+}
+
+async function fetchFeedbackList(silent = false) {
+  const box = document.getElementById('feedbackListContainer')
+  if (!silent && box && feedbackItems.length === 0) {
+    box.innerHTML = '<div class="push-preview-empty">Cargando feedback desde hentaila.pro...</div>'
+  }
+  try {
+    const res = await fetch(`${FEEDBACK_API_URL}?secret=${encodeURIComponent(PUSH_SECRET)}`, {
+      method: 'GET',
+      cache: 'no-store'
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`)
+    }
+    feedbackItems = Array.isArray(data.items) ? data.items : []
+    updateFeedbackBadges(data.pendingCount || 0)
+    if (!silent) renderFeedbackList()
+  } catch (err) {
+    if (!silent && box) {
+      box.innerHTML = `<div class="push-preview-empty">No se pudo cargar el feedback: ${escapeHtml(err.message)}</div>`
+    }
+  }
+}
+
+function formatFeedbackDate(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString('es-PE', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch {
+    return iso
+  }
+}
+
+function renderFeedbackList() {
+  const box = document.getElementById('feedbackListContainer')
+  if (!box) return
+
+  const filtered = feedbackItems.filter(item => {
+    if (currentFeedbackFilter === 'all') return true
+    if (currentFeedbackFilter === 'error') return item.topic === 'error'
+    if (currentFeedbackFilter === 'comentario') return item.topic !== 'error'
+    if (currentFeedbackFilter === 'pendiente') return item.status === 'pendiente'
+    if (currentFeedbackFilter === 'revisado') return item.status === 'revisado'
+    return true
+  })
+
+  if (filtered.length === 0) {
+    box.innerHTML = '<div class="push-preview-empty">No hay reportes en esta categoría todavía.</div>'
+    return
+  }
+
+  box.innerHTML = filtered.map(item => {
+    const isError = item.topic === 'error'
+    const isDone = item.status === 'revisado'
+    const topicClass = isError ? 'fb-tag-error' : (item.topic === 'sugerencia' ? 'fb-tag-idea' : 'fb-tag-comment')
+    const statusClass = isDone ? 'fb-status-done' : 'fb-status-pending'
+    const statusLabel = isDone
+      ? `Revisado${item.reviewedBy ? ' por ' + escapeHtml(item.reviewedBy) : ''}`
+      : 'Pendiente'
+
+    const urlHtml = item.pageUrl
+      ? `<div class="fb-item-meta-row">
+           <span class="fb-meta-label">Página:</span>
+           <a href="${escapeAttr(item.pageUrl.startsWith('http') ? item.pageUrl : 'https://hentaila.pro' + (item.pageUrl.startsWith('/') ? '' : '/') + item.pageUrl)}" target="_blank" rel="noopener" class="fb-meta-link">${escapeHtml(item.pageUrl)}</a>
+         </div>`
+      : ''
+
+    const emailHtml = (item.wantsReply && item.email)
+      ? `<div class="fb-item-meta-row">
+           <span class="fb-meta-label">Responder a:</span>
+           <a href="mailto:${escapeAttr(item.email)}?subject=Respuesta%20a%20tu%20comentario%20en%20HentaiLA%20Pro" class="fb-meta-link">${escapeHtml(item.email)}</a>
+         </div>`
+      : ''
+
+    const screenshotHtml = item.screenshotUrl
+      ? `<div class="fb-screenshot-box">
+           <img src="${escapeAttr(item.screenshotUrl)}" alt="Captura adjunta" class="fb-screenshot-img" onclick="openFeedbackImage('${escapeAttr(item.id)}')" />
+           <span class="fb-screenshot-hint">Clic en la imagen para ampliar</span>
+         </div>`
+      : ''
+
+    return `
+      <div class="fb-card-item ${isDone ? 'fb-card-done' : ''}">
+        <div class="fb-card-top">
+          <div class="fb-badges-left">
+            <span class="fb-tag ${topicClass}">${escapeHtml(item.topicLabel || item.topic)}</span>
+            <span class="fb-status ${statusClass}">${statusLabel}</span>
+          </div>
+          <div class="fb-date">${escapeHtml(formatFeedbackDate(item.createdAt))}</div>
+        </div>
+
+        <div class="fb-author-row">
+          <span>Enviado por: <strong>${escapeHtml(item.authorName || 'Invitado')}</strong> ${item.isGuest ? '(Invitado)' : '(Usuario registrado)'}</span>
+        </div>
+
+        <div class="fb-message">${escapeHtml(item.message)}</div>
+
+        ${urlHtml}
+        ${emailHtml}
+        ${screenshotHtml}
+
+        <div class="fb-actions">
+          <button type="button" class="fb-action-btn ${isDone ? '' : 'fb-action-btn--resolve'}" onclick="toggleFeedbackStatus('${escapeAttr(item.id)}')">
+            ${isDone ? 'Marcar como pendiente' : 'Marcar como revisado'}
+          </button>
+          <button type="button" class="fb-action-btn fb-action-btn--delete" onclick="deleteFeedbackItem('${escapeAttr(item.id)}')">
+            Eliminar
+          </button>
+        </div>
+      </div>
+    `
+  }).join('')
+}
+
+function openFeedbackImage(id) {
+  const item = feedbackItems.find(x => x.id === id)
+  if (!item || !item.screenshotUrl) return
+  const win = window.open('', '_blank')
+  if (win) {
+    win.document.write(`<!DOCTYPE html><html><head><title>Captura de Feedback</title><style>body{margin:0;background:#0a0a0f;display:flex;align-items:center;justify-content:center;min-height:100vh;}img{max-width:96vw;max-height:96vh;object-fit:contain;border-radius:8px;}</style></head><body><img src="${item.screenshotUrl}" /></body></html>`)
+    win.document.close()
+  }
+}
+
+async function toggleFeedbackStatus(id) {
+  try {
+    const reviewer = currentSession?.userName || 'Equipo'
+    const res = await fetch(FEEDBACK_API_URL, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret: PUSH_SECRET,
+        id,
+        action: 'toggleStatus',
+        reviewedBy: reviewer
+      })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Error al actualizar')
+    feedbackItems = Array.isArray(data.items) ? data.items : feedbackItems
+    updateFeedbackBadges(data.pendingCount || 0)
+    renderFeedbackList()
+  } catch (err) {
+    showToast('Error al actualizar estado: ' + err.message, 'error')
+  }
+}
+
+async function deleteFeedbackItem(id) {
+  if (!confirm('¿Eliminar este reporte de feedback permanentemente?')) return
+  try {
+    const res = await fetch(FEEDBACK_API_URL, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret: PUSH_SECRET,
+        id,
+        action: 'delete'
+      })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Error al eliminar')
+    feedbackItems = Array.isArray(data.items) ? data.items : []
+    updateFeedbackBadges(data.pendingCount || 0)
+    renderFeedbackList()
+    showToast('Feedback eliminado', 'info')
+  } catch (err) {
+    showToast('Error al eliminar: ' + err.message, 'error')
   }
 }

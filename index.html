@@ -77,6 +77,11 @@
             <span class="hstat-val" id="hStatPendRed">—</span>
           </div>
         </div>
+        <button class="feedback-open-btn" id="feedbackOpenBtn" onclick="openFeedbackModal()" style="display:none" title="Ver todos los consejos y errores reportados en hentaila.pro/feedback">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          <span>Ver todo el Feedback</span>
+          <span class="feedback-count-badge" id="feedbackHeaderBadge" style="display:none">0</span>
+        </button>
         <button class="push-open-btn" id="pushOpenBtn" onclick="openPushModal()" style="display:none" title="Enviar anuncio a todos los dispositivos con notificaciones activas">🔔 Enviar Anuncio Push</button>
         <div class="user-indicator" id="userIndicator" style="display:none"></div>
         <button class="logout-btn" id="logoutBtn" onclick="doLogout()" style="display:none" title="Cerrar sesión">↪ Salir</button>
@@ -178,6 +183,12 @@
         </div>
 
         <button class="refresh-btn" onclick="loadStats()">🔄 Actualizar Stats</button>
+
+        <button class="feedback-dash-btn" onclick="openFeedbackModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          <span>Ver todo el Feedback</span>
+          <span class="feedback-count-badge" id="feedbackDashBadge" style="display:none">0</span>
+        </button>
 
         <!-- ASIGNACIÓN DE LETRAS -->
         <div class="letras-section">
@@ -291,6 +302,37 @@
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closePushModal()">Cancelar</button>
         <button class="btn-primary" id="pushSendBtn" onclick="sendPushAnnouncement()">🚀 Enviar a todos los dispositivos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ MODAL BANDEJA DE FEEDBACK ══════════════ -->
+  <div class="modal-overlay" id="feedbackOverlay" style="display:none" onclick="handleFeedbackOverlayClick(event)">
+    <div class="modal feedback-modal" id="feedbackModalBox">
+      <div class="feedback-modal-header">
+        <div>
+          <div class="modal-title" style="margin-bottom:4px;display:flex;align-items:center;gap:8px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA4C89" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span>Bandeja de Feedback y Reportes</span>
+          </div>
+          <p class="push-hint" style="margin:0;">Consejos, ideas y errores enviados por los usuarios desde <strong>hentaila.pro/feedback</strong>.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="btn-secondary" onclick="fetchFeedbackList()" style="padding:7px 12px;font-size:12px;">Actualizar</button>
+          <button type="button" class="btn-secondary" onclick="closeFeedbackModal()" style="padding:7px 12px;font-size:12px;">Cerrar</button>
+        </div>
+      </div>
+
+      <div class="feedback-filters" id="feedbackFilters">
+        <button type="button" class="feedback-filter-btn active" data-filter="all" onclick="setFeedbackFilter('all')">Todos</button>
+        <button type="button" class="feedback-filter-btn" data-filter="error" onclick="setFeedbackFilter('error')">Errores</button>
+        <button type="button" class="feedback-filter-btn" data-filter="comentario" onclick="setFeedbackFilter('comentario')">Comentarios / Ideas</button>
+        <button type="button" class="feedback-filter-btn" data-filter="pendiente" onclick="setFeedbackFilter('pendiente')">Pendientes</button>
+        <button type="button" class="feedback-filter-btn" data-filter="revisado" onclick="setFeedbackFilter('revisado')">Revisados</button>
+      </div>
+
+      <div class="feedback-list" id="feedbackListContainer">
+        <div class="push-preview-empty">Cargando feedback...</div>
       </div>
     </div>
   </div>
